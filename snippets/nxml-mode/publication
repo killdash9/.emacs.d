@@ -1,0 +1,5 @@
+<row>
+    publication_id:${1:1}
+    field_config_name:field-config-$1
+    title:title-$1
+</row>

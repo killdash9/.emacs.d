@@ -1,0 +1,6 @@
+<row>
+    silo_id:${1:2}
+    name:${1:$(concat "Silo " yas-text)}
+    includes_new_publications:false
+    contribution_level:full
+</row>
