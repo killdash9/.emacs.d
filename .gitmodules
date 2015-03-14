@@ -1,3 +1,6 @@
 [submodule "site-lisp/broadcast.el"]
 	path = site-lisp/broadcast.el
 	url = https://github.com/killdash9/broadcast.el.git
+[submodule "site-lisp/org-passwords.el"]
+	path = site-lisp/org-passwords.el
+	url = https://killdash9@bitbucket.org/killdash9/org-passwords.el.git
