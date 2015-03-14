@@ -4,3 +4,9 @@
 [submodule "site-lisp/org-passwords.el"]
 	path = site-lisp/org-passwords.el
 	url = https://killdash9@bitbucket.org/killdash9/org-passwords.el.git
+[submodule "site-lisp/swiper"]
+	path = site-lisp/swiper
+	url = https://github.com/killdash9/swiper.git
+[submodule "site-lisp/tron.el"]
+	path = site-lisp/tron.el
+	url = https://github.com/killdash9/tron.el.git
