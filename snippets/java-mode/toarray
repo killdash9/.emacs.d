@@ -1,0 +1,6 @@
+# -*- mode: snippet; require-final-newline: nil -*-
+# name: toarray
+# key: toarray
+# binding: direct-keybinding
+# --
+($1[]) $2.toArray(new String[$2.size()])

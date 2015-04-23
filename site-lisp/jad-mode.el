@@ -86,7 +86,8 @@ command and load the decompiled file."
                           (write-region nil nil tempfile)
                           tempfile
                           )))
-       (jdc-javafile (concat (substring jdc-classfile 0 -5) jdc-extension))
+       ;; the regexp below replaces /tmp/jarname.jar:ClassName.class with ClassName.class
+       (jdc-javafile (replace-regexp-in-string "[^/:]+:" "" (concat (substring jdc-classfile 0 -5) jdc-extension)))
        (command (concat jdc-command (when (not exists) " -d /tmp " ) jdc-parameter jdc-classfile " > /dev/null")))
     (shell-command command)
     (find-alternate-file jdc-javafile)))

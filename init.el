@@ -55,6 +55,7 @@
 ;;; *** zone
 (use-package zone
   :commands zone-when-idle
+  :defer 5
   :config
   (progn
     (use-package battery
@@ -70,9 +71,8 @@
         (setq zmx-unicode-mode t)
         (setq zone-programs (vconcat zone-programs [zone-matrix]))
         ))
-    (setq zone-programs (remove-if (lambda (x) (member x '(zone-pgm-jitter))) zone-programs))
-    )
-  :idle (zone-when-idle 300))
+    (setq zone-programs (remove-if (lambda (x) (member x '(zone-pgm-jitter zone-pgm-dissolve))) zone-programs))
+    (zone-when-idle 300)))
 
 ;;; *** fns.c
 (progn
@@ -87,6 +87,7 @@
 
 ;;; *** variable-pitch-modes
 (use-package variable-pitch-modes)
+
 ;;(eval-after-load "isearch" '(require 'isearch+))
 ;;; ** Games
 ;;; *** 2048-game
@@ -120,7 +121,10 @@
 ;;; *** yasnippet
 (use-package yasnippet
   :commands yas-global-mode
-  :idle (yas-global-mode 1))
+  :defer 5
+  :config (progn
+	    (yas-global-mode 1)
+	    (diminish 'yas-minor-mode " Y")))
 
 ;;; *** zencoding-mode
 (use-package zencoding-mode
@@ -155,13 +159,13 @@
 
 ;;; *** pretty-lambdada
 (use-package pretty-lambdada
-  :defer t
-  :idle (pretty-lambda-for-modes))
+  :defer 5
+  :config (pretty-lambda-for-modes))
 
 ;;; *** saveplace
 (use-package saveplace
-  :defer
-  :idle
+  :defer 5
+  :config
   (set-default 'save-place t))
 
 ;;; *** executable
@@ -174,9 +178,17 @@
 
 ;;; *** paren
 (use-package paren
-  :defer
-  :idle
+  :defer 5
+  :config
   (show-paren-mode 1))
+
+;;; *** smartparens
+(use-package smartparens
+  :ensure t
+  :defer 5
+  :config
+  (progn
+    (bind-key "C-<right>" 'sp-slurp-hybrid-sexp smartparens-mode-map)))
 
 ;;; *** simple
 (use-package simple
@@ -203,6 +215,20 @@
                                                      (current-kill 0)
                                                      t))
         (call-interactively 'yank)))
+
+    ;; Indent after yank
+    (dolist (command '(yank yank-pop))
+      (eval `(defadvice ,command (after indent-region activate)
+               (and (not current-prefix-arg)
+                    (member major-mode '(emacs-lisp-mode lisp-mode
+                                                         clojure-mode    scheme-mode
+                                                         haskell-mode    ruby-mode
+                                                         rspec-mode      python-mode
+                                                         c-mode          c++-mode
+                                                         objc-mode       latex-mode
+                                                         plain-tex-mode  java-mode))
+                    (let ((mark-even-if-inactive transient-mark-mode))
+                      (indent-region (region-beginning) (region-end) nil))))))
 
     (defun join-region (beg end)
       "Apply join-line over region."
@@ -260,8 +286,8 @@
 
 ;;; *** autorevert
 (use-package autorevert
-  :defer
-  :idle (global-auto-revert-mode 1))
+  :defer 5
+  :config (global-auto-revert-mode 1))
 
 ;;; *** multiple-cursors
 (use-package multiple-cursors
@@ -285,17 +311,19 @@
 
 ;;; *** visible-mark
 (use-package visible-mark
-  :defer t
+  :defer 5
   :init
   (defface visible-mark-active ;; put this before (require 'visible-mark)
     '((((type tty) (class mono)))
       (t (:background "magenta"))) "")
-  :idle (global-visible-mark-mode 1))
+  :config (global-visible-mark-mode 1))
 
 ;;; *** expand-region
 (use-package expand-region
   :ensure t
-  :bind ("C-=" . er/expand-region))
+  :bind ("C-=" . er/expand-region)
+  :config (progn
+            (add-hook 'java-mode-hook 'er/add-cc-mode-expansions)))
 
 ;;; *** editfns.c
 (progn                                  ;editfns.c
@@ -320,8 +348,12 @@
     (key-chord-define-global "xb" 'ido-switch-buffer)
     (key-chord-define-global "xf" 'ido-find-file)
     (key-chord-define-global "xs" 'save-buffer)
-    (key-chord-define-global "hr" 'helm-recentf)
+    (key-chord-define-global "r4" 'helm-recentf)
+    (key-chord-define-global "hh" 'helm-resume)
     (key-chord-mode 1)))
+;;; *** flycheck
+(use-package flycheck
+  :ensure t)
 ;;; ** Terminal
 ;;; *** multi-term
 (use-package multi-term
@@ -359,8 +391,7 @@
         (save-restriction
           (widen)
           (goto-char (point-max))
-          (delete-horizontal-space))))
-    )
+          (delete-horizontal-space)))))
 
 
   (setq term-prompt-regexp  "^[^#$%>\n]*[#$%>] *"))
@@ -406,6 +437,11 @@
   :bind ("C-;" . cssh-term-remote-open))
 
 ;;; ** External System Integration
+;;; *** dig
+(use-package dig
+  :config
+  (put 'dig 'interactive-form '(interactive (list (completing-read "Host: " (progn (require 'cssh) (cssh-get-hosts-list)))))))
+
 ;;; *** helm-spotify
 (use-package helm-spotify
   :ensure t
@@ -424,6 +460,7 @@
 ;;; *** ahg
 (use-package ahg
   :bind-keymap* ("C-c h g" . ahg-global-map)
+  :defer t
   :config
   (progn
     (global-set-key (kbd "C-c h g SPC") 'ahg-do-command)
@@ -434,8 +471,29 @@
         (let* ((r1 (ahg-log-revision-at-point t))
                (r2 (ahg-first-parent-of-rev r1))
                (fn (ahg-log-filename-at-point (point))))
-          (ahg-diff r2 r1 (list fn))))))
-  )
+          (ahg-diff r2 r1 (list fn)))))))
+
+;;; *** magit
+(use-package magit
+  :init
+  (setq magit-last-seen-setup-instructions "1.4.0")
+  :config
+  (progn
+    '(defun endless/add-PR-fetch ()
+      "If refs/pull is not defined on a GH repo, define it."
+      (let ((fetch-address
+             "+refs/pull/*/head:refs/pull/origin/*"))
+        (unless (member
+                 fetch-address
+                 (magit-get-all "remote" "origin" "fetch"))
+          (when (string-match
+                 "github" (magit-get "remote" "origin" "url"))
+            (magit-git-string
+             "config" "--add" "remote.origin.fetch"
+             fetch-address)))))
+    ;;(add-hook 'magit-mode-hook #'endless/add-PR-fetch)
+    (magit-auto-revert-mode 0)
+    ))
 
 ;;; *** restclient
 (use-package restclient
@@ -454,7 +512,7 @@
   :ensure t
   :commands jabber-connect-all
   :bind-keymap* ("C-c C-j" . jabber-global-keymap)
-
+  :defer 5
   :config
   (progn
     (setq starttls-extra-arguments (list "--insecure" ))
@@ -466,8 +524,7 @@
     (bind-key "C-x C-j" 'dired-jump)
     (bind-key "C-x 4 C-j" 'dired-jump-other-window)
     (bind-key* "C-c C-j" jabber-global-keymap)
-    (jabber-connect-all))
-  :idle (require 'jabber))
+    (jabber-connect-all)))
 ;;; *** play-sound
 (unless (and (fboundp 'play-sound-internal)
              (subrp (symbol-function 'play-sound-internal)))
@@ -479,25 +536,62 @@
   :bind* ("M-j" . ace-jump-mode))
 
 ;;; *** projectile
+(setq helm-projectile-fuzzy-match t)
 (use-package projectile
   :commands projectile-global-mode
   :init (projectile-global-mode)
-  :config (setq projectile-completion-system 'helm))
+  :config (progn
+	    (setq projectile-completion-system 'helm)
+	    (diminish 'projectile-mode)))
 
 ;;; *** helm-projectile
-'(use-package helm-projectile
-  :init (helm-projectile-on))
+(use-package helm-projectile
+   :config (progn
+             ;; (setq helm-projectile-fuzzy-match t) ;; this should be the default
+             (helm-projectile-on)
+             (defun my-find-file-in-projects (&optional arg)
+               (interactive "P")
+               (if (projectile-project-p)
+                   (projectile-maybe-invalidate-cache arg))
+               (helm :sources 'helm-source-projectile-files-in-all-projects-list
+                     :buffer "*helm projectile*"
+                     :prompt "Find file in projects (M-n for current file): "
+                     :default (and (projectile-project-p) buffer-file-name
+                                   (file-relative-name
+                                    buffer-file-name (projectile-project-root)))))
+             
+             (defalias 'helm-projectile-find-file-in-known-projects 'my-find-file-in-projects  )))
 
-;;; *** ack-and-a-half
-(use-package ack-and-a-half
-  :commands (ack ack-same ack-find-file ack-find-file-same)
+;;; *** helm-ag
+(use-package helm-ag
+  :ensure t
   :config
   (progn
-    (defalias 'ack 'ack-and-a-half)
-    (defalias 'ack-same 'ack-and-a-half-same)
-    (defalias 'ack-find-file 'ack-and-a-half-find-file)
-    (defalias 'ack-find-file-same 'ack-and-a-half-find-file-same)))
+    (setq helm-ag-use-grep-ignore-list t)
+    (setq helm-ag-base-command "ag --nocolor --nogroup --ignore-case ")
+    (defun helm-find-files-ag (candidate)
+      "Default action to grep files from `helm-find-files'.  Replaces helm-find-files-grep."
+      (let ((default-directory candidate))
+        (helm-projectile-ag)))
+    (defalias 'helm-find-files-grep 'helm-find-files-ag)
+    '(defalias 'helm-ff-run-grep 'helm-projectile-ag)
+    '(defalias 'helm-projectile-grep 'helm-projectile-ag)))
 
+;;; *** grep
+(use-package grep
+  :config
+  (progn
+    (add-to-list 'grep-find-ignored-files "*.pdf")
+    (add-to-list 'grep-find-ignored-files "pts.js")
+    (add-to-list 'grep-find-ignored-files "jquery-*")
+    (add-to-list 'grep-find-ignored-files "*.log")
+    (add-to-list 'grep-find-ignored-files "*.log.*")
+    (add-to-list 'grep-find-ignored-files "#*#")
+    (add-to-list 'grep-find-ignored-files "#.orig")
+    (add-to-list 'grep-find-ignored-directories "templates_c")
+    (add-to-list 'grep-find-ignored-directories "ci_system")
+    (add-to-list 'grep-find-ignored-directories "bin5")
+    (add-to-list 'grep-find-ignored-directories "bin")))
 ;;; *** smartscan
 (use-package smartscan
   :bind (("M-n" . smartscan-symbol-go-forward)
@@ -566,10 +660,26 @@
                                          activate )
           "Flatten hierarchical indexes that get passed to this function"
           (let ((index-alist (flatten-index (cons "" index-alist) "")))
-            ad-do-it))))))
+            ad-do-it))))
+
+    '(defun find-file-sudo ()
+      "Find file as root if necessary."
+      (when buffer-file-name
+        (unless (file-writable-p buffer-file-name)
+          (message "file is %s" buffer-file-name)
+          (find-alternate-file (if (file-remote-p buffer-file-name) 
+                                   (replace-regexp-in-string "/[^:]*\\\(:.*\\\):" (concat "/ssh\\1|sudo:" (with-parsed-tramp-file-name buffer-file-name nil host) ":") buffer-file-name)
+                                 (concat "/sudo:root@localhost:" buffer-file-name))))))
+    
+    ;; from http://emacsredux.com/blog/2013/04/21/edit-files-as-root/
+    '(advice-add 'dired-find-file :after #'find-file-sudo)
+    '(advice-add 'ido-find-file :after #'find-file-sudo)
+    '(advice-remove 'dired-find-file  #'find-file-sudo)
+    '(advice-remove 'ido-find-file  #'find-file-sudo)
+    ))
 
 ;;; *** fiplr
-(use-package fiplr
+'(use-package fiplr
   :ensure t
   :commands (dfo dbo sfo sbo lfo lbo nco)
   :bind (("s-P" . choose-fiplr-directory)
@@ -635,7 +745,20 @@
   :init
   (recentf-mode))
 
-;;; ** Language Modes
+;;; *** syntax-subword-mode
+;; better word navigation
+(use-package syntax-subword
+  :config
+  (progn
+    (global-syntax-subword-mode 1)
+    (setq syntax-subword-skip-spaces 'consistent)))
+;;; *** helm
+;; better word navigation
+(use-package helm
+  :commands (helm-resume
+             helm-recentf))
+
+;;; ** Major Modes
 ;;; *** js2-mode
 (use-package js2-mode
   :ensure t
@@ -656,6 +779,12 @@
     (use-package js2-refactor
       :ensure t
       :config (js2r-add-keybindings-with-prefix "C-j"))))
+
+;;; *** json-mode
+(use-package json-mode
+  :ensure t
+  :mode (("\\.json\\'" . json-mode)
+         ("\\.har\\'" . json-mode)))
 
 ;;; *** jquery-doc
 (use-package jquery-doc
@@ -683,23 +812,35 @@
     (add-hook 'html-mode-hook 'skewer-html-mode)))
 
 ;;; *** php-mode
+
 (use-package php-mode
   :ensure t
   :mode (("\\.inc\\'" . php-mode)
          ("\\.php\\'" . php-mode))
   :config
   (progn
+
+    (defun maio/electric-semicolon ()
+      (interactive)
+      (end-of-line)
+      (when (not (looking-back ";"))
+        (insert ";")))
+    
+    (define-key php-mode-map ";" 'maio/electric-semicolon)
+    
+    (add-hook 'php-mode-hook 'smartparens-mode)
     (setq php-mode-coding-style 'symfony2)
     (bind-key [(control .)] nil php-mode-map)
+    (add-hook 'php-mode-hook 'flycheck-mode)
     ;; we don't want this to overshadow our multi-cursor selection
     (use-package php-eldoc
       :ensure t
       :config
       (add-hook 'php-mode-hook 'php-eldoc-enable))
-    (use-package flymake-php
-      :ensure t
-      :config
-      (add-hook 'php-mode-hook 'flymake-php-load))))
+    '(use-package flymake-php ;; using flycheck now
+       :ensure t
+       :config
+       (add-hook 'php-mode-hook 'flymake-php-load))))
 
 ;;; *** geben
 (use-package geben
@@ -813,8 +954,20 @@
   :config
   (progn
 
+    (defun my-c-setup ()
+      (c-set-offset 'substatement-open 0))
+
+    
     (add-hook 'java-mode-hook 'better-java-indexing)
     (add-hook 'java-mode-hook 'smartparens-mode)
+    (add-hook 'c-mode-hook 'my-c-setup)
+    (add-hook 'java-mode-hook 'my-c-setup)
+    (define-key c-mode-map ";" 'maio/electric-semicolon)
+
+    (setq c-default-style '((java-mode . "java")
+                            (awk-mode . "awk")
+                            (other . "gnu")))
+
     (defun better-java-indexing ()
       (make-local-variable 'collected-names)
       (setq imenu-prev-index-position-function
@@ -849,7 +1002,7 @@
                 (concat
                  word
                  (let ((count (count-if (lambda (e) (equal word e)) collected-names)))
-                   (if (> count 1) (concat "<" (number-to-string count) ">")) ))))))))
+                   (if (> count 1) (concat "<" (number-to-string count) ">")) ))))))) ())
 
 ;;; *** vtl
 (use-package vtl
@@ -876,9 +1029,17 @@
                  (current-buffer))
         (error (message "Invalid expression")
                (insert (current-kill 0)))))
+
+    (defun my-emacs-lisp-mode-hook ()
+      (add-hook 'after-save-hook 'check-parens nil t))
+
+    (add-hook 'emacs-lisp-mode-hook 'my-emacs-lisp-mode-hook)
+    
     (use-package paredit
       :config
-      (add-hook 'emacs-lisp-mode-hook 'paredit-mode)
+      (progn
+        (add-hook 'emacs-lisp-mode-hook 'paredit-mode)
+        (diminish 'paredit-mode " ()"))
       ;; making paredit work with delete-selection-mode
       ;; (from http://whattheemacsd.com/setup-paredit.el-03.html )
       ;; (put 'paredit-forward-delete 'delete-selection 'supersede)
@@ -890,7 +1051,9 @@
       )
     (use-package eldoc
       :config
-      (add-hook 'emacs-lisp-mode-hook 'eldoc-mode))))
+      (progn
+        (add-hook 'emacs-lisp-mode-hook 'eldoc-mode)
+        (diminish 'eldoc-mode)))))
 
 ;;; *** nxml-mode
 (use-package nxml-mode
@@ -909,8 +1072,10 @@
 ;;; *** auto-complete
 (use-package auto-complete
   :ensure t
-  :defer t
-  :idle (global-auto-complete-mode))
+  :defer 5
+  :config (progn
+	    (global-auto-complete-mode)
+	    (diminish 'auto-complete-mode)))
 
 ;;; *** apples-mode
 (use-package apples-mode
@@ -926,7 +1091,10 @@
 (use-package markdown-mode
   :mode "\\.md$"
   :ensure t)
-
+;;; *** conf-mode
+(use-package conf-mode
+  :mode "\\.hgrc$"
+  :ensure t)
 ;;; ** File, Window and Buffer Management
 ;;; *** windmove
 (use-package windmove
@@ -983,11 +1151,30 @@
 ;;; *** files.el
 (progn   ;files.el
   ;; Settings for backups -- move emacs terds into separate dir
-  (setq backup-directory-alist `(("." . "~/.saves")))
-  (setq delete-old-versions t
-        kept-new-versions 6
-        kept-old-versions 2
-        version-control t))
+
+  (setq make-backup-files t
+        vc-make-backup-files t
+        delete-old-versions t
+        kept-new-versions 100
+        kept-old-versions 0
+        backup-by-copying t
+        version-control t)
+  (setq backup-dir  "~/.saves")
+  (if (not (file-exists-p backup-dir))
+      (make-directory backup-dir))
+  (setq backup-directory-alist `(("." . ,backup-dir)))
+  
+  (defun force-backup-of-buffer ()
+    (setq buffer-backed-up nil))
+
+  (add-hook 'before-save-hook 'force-backup-of-buffer)
+  ;; this is what tramp uses
+  (setq tramp-backup-directory-alist backup-directory-alist))
+
+;;; *** backup-walker
+(use-package backup-walker
+  :ensure t
+  :commands backup-walker-start)
 
 ;;; *** dired
 (use-package dired
@@ -1110,6 +1297,10 @@
 ;;; *** buffer-flip
 (use-package buffer-flip
   :config (buffer-flip-mode 1))
+;;; *** ns-win (drag n drop)
+(use-package ns-win
+  :config
+  (global-set-key [M-drag-n-drop] 'ns-drag-n-drop))
 ;;; ** org
 (use-package org
   :commands org-mode
@@ -1118,11 +1309,12 @@
   (( "C-c l" . org-store-link)
    ( "C-c c" . org-capture)
    ( "C-c a" . org-agenda)
-   ( "C-c b" . org-iswitchb)
+   ( "C-c C-x C-i" . org-clock-in)
+   ( "C-c C-x C-o" . org-clock-out)
    ;; these come from mac shortcut keys (automator services)
-   ( "s-O" . org-capture)
-   ( "s-(" . org-capture-mail)
-   ( "s-)" . org-capture-chrome)
+   ;;( "s-O" . org-capture)
+   ( "<C-f9>" . org-capture-mail)
+   ( "<C-f10>" . org-capture-chrome)
    )
   :config
   (progn
@@ -1132,7 +1324,7 @@
       (org-capture nil "m"))
     (defun org-capture-chrome ()
       (interactive)
-      (org-capture- nil "c"))
+      (org-capture nil "c"))
     (org-babel-do-load-languages
      'org-babel-load-languages
      '(
@@ -1219,6 +1411,8 @@
       )
     (bind-key (kbd "C-c g") 'org-mac-grab-link org-mode-map)
     (bind-key (kbd "C-c s") 'org-table-sum-column org-mode-map)
+    (bind-key (kbd "C-s") 'isearch-forward org-mode-map)
+    (bind-key (kbd "C-r") 'isearch-backward org-mode-map)
     (add-hook 'org-mode-hook 'visual-line-mode)
     ;;(require 'org-mac-iCal)
     ;;(run-with-timer 0 (* 8 60 60) 'org-mac-iCal) ; update from calendars every 8 hours
@@ -1261,6 +1455,8 @@ applied."
              "* TODO %?")
             ("h" "Home TODO" entry (file+olp "~/org/life.org" "Home" "Tasks")
              "* TODO %?\n  %i\n")
+            ("s" "SAR TODO" entry (file+olp "~/org/life.org" "SAR" "Tasks")
+             "* TODO %?\n  %i\n")
             ("t" "General TODO" entry (file+headline "~/org/life.org" "Tasks")
              "* TODO %?\n  %i\n")
             ("p" "Password" entry (file org-passwords-file)
@@ -1277,7 +1473,7 @@ applied."
         (setq org-tags-exclude-from-inheritance (quote ("crypt")))
         (setq org-crypt-key nil)))
 
-    (use-package ox-reveal)
+    ;(use-package ox-reveal)
     (use-package org-mac-link
       :commands org-mac-grab-link
       :config (message "org-mac-link loaded"))
@@ -1295,12 +1491,11 @@ applied."
 
 ;;; ** midnight
 (use-package midnight
-  :defer t
+  :defer 60
   :config
   (progn
     (setq midnight-hook (quote (clean-buffer-list org-mobile-push xkcd)))
-    (midnight-delay-set 'midnight-delay 43200))
-  :idle (require 'midnight))
+    (midnight-delay-set 'midnight-delay 43200)))
 
 ;;; ** exec-path-from-shell
 (use-package exec-path-from-shell
@@ -1309,12 +1504,13 @@ applied."
 
 ;;; ** package
 (use-package package
-  :idle (progn
-          ;; this block deletes obsolte packages
-          (package-list-packages t)
-          (package-menu-mark-obsolete-for-deletion)
-          (package-menu-execute t)
-          (kill-this-buffer)))
+  ;; :idle (progn
+  ;;         ;; this block deletes obsolte packages
+  ;;         (package-list-packages t)
+  ;;         (package-menu-mark-obsolete-for-deletion)
+  ;;         (package-menu-execute t)
+  ;;         (kill-this-buffer))
+  )
 ;;; ** doc-view
 (use-package doc-view
   :init
@@ -1335,13 +1531,33 @@ Requires ImageMagick installation"
         (call-process-shell-command "convert" nil nil nil "-rotate" "-90" (concat "\"" file-name "\"") (concat "\"" file-name "\""))
         (clear-image-cache)
         (doc-view-goto-page (doc-view-current-page))))))
+;;; ** artist
+(use-package artist
+  :config
+  (define-key artist-mode-map [down-mouse-3] 'artist-mouse-choose-operation))
+;;; ** ediff
+(use-package ediff
+  :defer t
+  :config
+  (progn
+    (defun ediff-copy-both-to-C ()
+      (interactive)
+      (let ((n ediff-current-difference)
+            (b ediff-control-buffer))
+       (ediff-copy-diff n nil 'C nil
+                        (concat
+                         (ediff-get-region-contents n 'A b)
+                         (ediff-get-region-contents n 'B b)))))
+    (defun add-d-to-ediff-mode-map () (define-key ediff-mode-map "d" 'ediff-copy-both-to-C))
+    (add-hook 'ediff-keymap-setup-hook 'add-d-to-ediff-mode-map)))
+  
 ;;; ** Company-Specific Packages
 ;;; *** jenkins-build
 (use-package jenkins-build
   :commands (dfb dbb sfb sbb lfb lbb ncb))
 
 ;;; *** project-search
-(use-package project-search
+'(use-package project-search
   :commands (dff dgf dbf sff sbf lff lbf ncf ffphp ffe fbe)
   :bind (("C-f" . dff)
          ("C-b" . dbf)))
@@ -1359,6 +1575,18 @@ Requires ImageMagick installation"
   :commands (ocr-dev ocrtext-dev ocr-stage ocrtext-stage ocr-live ocrtext-live))
 
 ;;; * Misc Functions
+(defun random-sort-lines (beg end)
+  "Sort lines in region randomly."
+  (interactive "r")
+  (save-excursion
+    (save-restriction
+      (narrow-to-region beg end)
+      (goto-char (point-min))
+      (let ;; To make `end-of-line' and etc. to ignore fields.
+          ((inhibit-field-text-motion t))
+        (sort-subr nil 'forward-line 'end-of-line nil nil
+                   (lambda (s1 s2) (eq (random 2) 0)))))))
+
 (defun remove-^M ()
   "Remove ^M at end of line in the whole buffer.  This is done in ahg-diff-mode
 so that extra ^M's are not added when applying hunks with C-c C-a.  Plus it
@@ -1414,6 +1642,15 @@ is a lot more readable without the ^M's getting in the way."
     ad-do-it
     ))
 
+(defun killdash9/comment-dwim (orig-func &rest args)
+  (when (not (region-active-p))
+    (beginning-of-line)
+    (set-mark (line-end-position))
+    (activate-mark))
+  (apply orig-func args)
+  (c-indent-line-or-region))
+
+(advice-add 'comment-dwim :around #'killdash9/comment-dwim)
 
 ;;; * Customization Variables
 (custom-set-variables
@@ -1428,11 +1665,11 @@ is a lot more readable without the ^M's getting in the way."
    ["#212526" "#ff4b4b" "#b4fa70" "#fce94f" "#729fcf" "#ad7fa8" "#8cc4ff" "#eeeeec"])
  '(atari-click-mode t)
  '(backup-by-copying-when-linked t)
- '(blink-cursor-mode nil)
+ '(blink-cursor-mode t)
  '(buffer-face-mode-face (quote fixed-pitch))
  '(c-default-style
    (quote
-    ((java-mode . "stroustrup")
+    ((java-mode . "strousttrup")
      (awk-mode . "awk")
      (other . "stroustrup"))))
  '(calendar-latitude 40.2444)
@@ -1446,7 +1683,7 @@ is a lot more readable without the ^M's getting in the way."
  '(cursor-in-non-selected-windows t)
  '(custom-safe-themes
    (quote
-    ("ee0ab0c0064d76662eef47614a587b3316a81418e54090a41b8d9704a7fcfee1" default)))
+    ("a27c00821ccfd5a78b01e4f35dc056706dd9ede09a8b90c6955ae6a390eb1c1e" "0c3f22acd840eaa072cb23d6c786fa00a69697593ac9d931087b87e072262a61" "6788ec244e2cb7e03ec12264888f3ad956f6373e92c0f964288fb984dd628977" "815956f68af145fca4fca99354b218112ce634225705931c0a8f6cc7c2c821ab" "f4405fefab9d7828fd3e0876a21af95cfae7d03146fb95b6480118325b43e22c" "05861f7ac0f5445539cb45ec2c1c47b4434d2e3c98f1de329d590242a70694ab" "efb876a2714f5a68f60f9db2b55852f039de39043efe788086d391d054908d31" "09a8deda49fcf29d19225b9f04000e8df5bf63907471b8f7a22019b76ccf18fd" "ee0ab0c0064d76662eef47614a587b3316a81418e54090a41b8d9704a7fcfee1" default)))
  '(custom-theme-load-path (quote (custom-theme-directory t "~/.emacs.d/themes")))
  '(debug-on-error nil)
  '(dired-dwim-target t)
@@ -1458,6 +1695,9 @@ is a lot more readable without the ^M's getting in the way."
  '(erc-hide-list (quote ("JOIN" "QUIT")))
  '(explicit-bash-args (quote ("--noediting" "-i" "-l")))
  '(fancy-splash-image "splash.png")
+ '(flycheck-php-phpmd-executable
+   "/Users/rblack/code/hg/news-dev-frontend/vendor/phpmd/phpmd/src/bin/phpmd")
+ '(flycheck-phpmd-rulesets (quote ("cleancode" "design" "unusedcode")))
  '(gnutls-trustfiles
    (quote
     ("/etc/ssl/certs/ca-certificates.crt" "/etc/pki/tls/certs/ca-bundle.crt" "/etc/ssl/ca-bundle.pem" "/usr/ssl/certs/ca-bundle.crt" "/opt/local/share/curl/curl-ca-bundle.crt")))
@@ -1481,7 +1721,6 @@ is a lot more readable without the ^M's getting in the way."
  '(jabber-history-enabled t)
  '(jabber-reconnect-delay 1800)
  '(jabber-use-global-history nil)
- '(java-mode-hook (quote (er/add-cc-mode-expansions better-java-indexing)))
  '(litable-result-format "=> %s ")
  '(load-prefer-newer t)
  '(mazemax-char "C")
@@ -1490,13 +1729,32 @@ is a lot more readable without the ^M's getting in the way."
  '(multi-term-program-switches "-l")
  '(org-agenda-files (quote ("~/org/life.org" "~/org/flagged.org")))
  '(org-agenda-include-diary t)
+ '(org-agenda-prefix-format
+   (quote
+    ((agenda . " %i %-12:c%?-12t% s%-10 e")
+     (timeline . "  % s")
+     (todo . " %i %-12:c")
+     (tags . " %i %-12:c")
+     (search . " %i %-12:c"))))
+ '(org-agenda-restore-windows-after-quit nil)
  '(org-agenda-skip-scheduled-if-done t)
  '(org-agenda-start-on-weekday nil)
+ '(org-agenda-window-setup (quote current-window))
  '(org-blank-before-new-entry (quote ((heading) (plain-list-item))))
  '(org-checkbox-hierarchical-statistics nil)
  '(org-completion-use-ido t)
+ '(org-emphasis-alist
+   (quote
+    (("*" font-lock-warning-face)
+     ("/" italic)
+     ("_" underline)
+     ("=" org-verbatim verbatim)
+     ("~" org-code verbatim)
+     ("+"
+      (:strike-through t)))))
  '(org-enforce-todo-dependencies t)
  '(org-export-with-sub-superscripts nil)
+ '(org-hide-emphasis-markers t)
  '(org-html-postamble nil)
  '(org-imenu-depth 3)
  '(org-log-done (quote time))
@@ -1514,6 +1772,8 @@ is a lot more readable without the ^M's getting in the way."
  '(paradox-automatically-star t)
  '(paradox-github-token t)
  '(php-manual-path "/Users/rblack/Downloads/php-chunked-xhtml")
+ '(projectile-enable-caching t)
+ '(projectile-ignored-projects (quote ("~/.emacs.d/")))
  '(safe-local-variable-values
    (quote
     ((org-confirm-babel-evaluate)
@@ -1525,9 +1785,10 @@ is a lot more readable without the ^M's getting in the way."
  '(save-place nil nil (saveplace))
  '(send-mail-function (quote mailclient-send-it))
  '(shell-switcher-new-shell-function (quote shell-switcher-make-shell))
- '(show-paren-mode nil)
+ '(show-paren-mode t)
  '(slime-volleyball-enable-sound nil)
  '(soap-debug t)
+ '(swiper-completion-method (quote helm))
  '(term-bind-key-alist
    (quote
     (("C-c C-c" . term-interrupt-subjob)
@@ -1582,10 +1843,11 @@ is a lot more readable without the ^M's getting in the way."
 (load "~/.emacs-secrets.el")
 
 ;;; * Load Theme
-(load-theme 'papyrus)
+(load-theme 'tron)
 
 ;;; * Local Variables
 ;; Local Variables:
 ;; eval: (orgstruct-mode 1)
 ;; orgstruct-heading-prefix-regexp: ";;; "
 ;; End:
+    
