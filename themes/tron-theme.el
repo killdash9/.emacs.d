@@ -45,6 +45,20 @@
  `(minibuffer-prompt ((t (:foreground "#729fcf" :bold t))))
  `(font-lock-warning-face ((t (:foreground "red" :bold t))))
  '(cursor ((t (:background "#a4c2cc"))))
+
+ '(helm-candidate-number ((t (:background "#e8b778" :foreground "black"))))
+ '(helm-header-line-left-margin ((t (:inherit 'helm-candidate-number))))
+ '(helm-match ((t (:inherit 'font-lock-string-face))))
+ '(helm-selection ((t (:inherit region))))
+ '(helm-visible-mark ((t (:inherit 'helm-candidate-number))))
+ '(helm-prefarg ((t (:background "#ec9346" :foreground "black"))))
+ '(helm-source-header ((t (:inherit 'fringe :weight bold :height 1.3 :family "Sans Serif"))))
+ '(helm-locate-finish ((t (:inherit 'helm-prefarg))))
+ '(helm-lisp-completion-info ((t (:inherit 'helm-prefarg))))
+
+ ;;; org
+ '(org-table (( t (:inherit 'font-lock-builtin-face))))
+ '(org-level-4 (( t (:inherit 'font-lock-string-face))))
 )
 
 (provide-theme 'tron)

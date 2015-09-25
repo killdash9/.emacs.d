@@ -1,3 +1,5 @@
+;;; * Custom File
+(setq custom-file "~/.emacs.d/custom.el")
 ;;; * Load Path
 (add-to-list 'load-path "~/.emacs.d/site-lisp/")
 ;; add all subdirectories of site-lisp to load path as well
@@ -188,7 +190,15 @@
   :defer 5
   :config
   (progn
-    (bind-key "C-<right>" 'sp-slurp-hybrid-sexp smartparens-mode-map)))
+    (bind-key "C-<right>" 'sp-slurp-hybrid-sexp smartparens-mode-map)
+    (bind-key "C-M-k" 'sp-kill-hybrid-sexp smartparens-mode-map)
+    ;; TODO: allow backward kills
+    (defun sp-kill-hybrid-sexp-skip-ws-first (&rest args)
+      (and
+       (looking-at "[\n\r \t]")
+       (re-search-forward "[^\n\r \t]" nil t)
+       (backward-char)))
+    (advice-add 'sp-kill-hybrid-sexp :before #'sp-kill-hybrid-sexp-skip-ws-first)))
 
 ;;; *** simple
 (use-package simple
@@ -216,19 +226,6 @@
                                                      t))
         (call-interactively 'yank)))
 
-    ;; Indent after yank
-    (dolist (command '(yank yank-pop))
-      (eval `(defadvice ,command (after indent-region activate)
-               (and (not current-prefix-arg)
-                    (member major-mode '(emacs-lisp-mode lisp-mode
-                                                         clojure-mode    scheme-mode
-                                                         haskell-mode    ruby-mode
-                                                         rspec-mode      python-mode
-                                                         c-mode          c++-mode
-                                                         objc-mode       latex-mode
-                                                         plain-tex-mode  java-mode))
-                    (let ((mark-even-if-inactive transient-mark-mode))
-                      (indent-region (region-beginning) (region-end) nil))))))
 
     (defun join-region (beg end)
       "Apply join-line over region."
@@ -239,20 +236,24 @@
             (goto-char beg)
             (while (< (point) end)
               (join-line 1)))))
+
+    (defun maybe-indent-region (&rest args)
+      (and (not current-prefix-arg)
+           (member major-mode
+                   '(emacs-lisp-mode lisp-mode
+                                     clojure-mode    scheme-mode
+                                     haskell-mode    ruby-mode
+                                     rspec-mode      python-mode
+                                     c-mode          c++-mode
+                                     objc-mode       latex-mode
+                                     plain-tex-mode  php-mode
+                                     js2-mode java-mode))
+           (let ((mark-even-if-inactive transient-mark-mode))
+             (indent-region (region-beginning) (region-end) nil))))
+    
     ;; This auto-indents on paste
     (dolist (command '(yank yank-pop))
-      (eval `(defadvice ,command (after indent-region activate)
-               (and (not current-prefix-arg)
-                    (member major-mode '(emacs-lisp-mode lisp-mode
-                                                         clojure-mode    scheme-mode
-                                                         haskell-mode    ruby-mode
-                                                         rspec-mode      python-mode
-                                                         c-mode          c++-mode
-                                                         objc-mode       latex-mode
-                                                         plain-tex-mode  php-mode
-                                                         js2-mode))
-                    (let ((mark-even-if-inactive transient-mark-mode))
-                      (indent-region (region-beginning) (region-end) nil))))))
+      (advice-add command :after #'maybe-indent-region))
 
     (defun duplicate-line-up()
       (interactive)
@@ -321,7 +322,7 @@
 ;;; *** expand-region
 (use-package expand-region
   :ensure t
-  :bind ("C-=" . er/expand-region)
+  :bind* ("M-e" . er/expand-region)
   :config (progn
             (add-hook 'java-mode-hook 'er/add-cc-mode-expansions)))
 
@@ -330,31 +331,82 @@
   (put 'narrow-to-region 'disabled nil))
 
 ;;; *** broadcast-mode
-(use-package broadcast-mode
+(use-package broadcast
   :commands (broadcast-mode))
 
-;;; *** ace-jump-zap
-(use-package ace-jump-zap
-  :ensure t
-  :bind
-  (("M-z" . ace-jump-zap-up-to-char-dwim)
-   ("C-M-z" . ace-jump-zap-to-char-dwim)))
+;;; *** avy-zap
+
+(use-package avy-zap
+  :bind (("M-z" . avy-zap-to-char-dwim)
+         ("M-Z" . avy-zap-up-to-char-dwim))
+  :config (setq avy-timeout-seconds .3)
+  :ensure t)
+
 ;;; *** key-chord
 (use-package key-chord
   :ensure t
   :config
   (progn
     (key-chord-define-global "kk" 'kill-this-buffer)
-    (key-chord-define-global "xb" 'ido-switch-buffer)
-    (key-chord-define-global "xf" 'ido-find-file)
+    (key-chord-define-global "xx" 'eval-defun)
+    (key-chord-define-global "xb" 'helm-mini ;'ido-switch-buffer
+                             )
+    (key-chord-define-global "xf" 'helm-find-files ;'ido-find-file
+                             )
     (key-chord-define-global "xs" 'save-buffer)
-    (key-chord-define-global "r4" 'helm-recentf)
     (key-chord-define-global "hh" 'helm-resume)
+    (key-chord-define-global "CC" 'calc-dispatch)
+    (key-chord-define-global "aa" (lambda () (interactive) (org-agenda nil "u")))
+    (key-chord-define-global "x1" (kbd "C-x 1"))
+    (key-chord-define-global "x2" (kbd "C-x 2"))
+    (key-chord-define-global "x3" (kbd "C-x 3"))
+    (key-chord-define-global "x6" (kbd "C-x 6"))
+    (key-chord-define-global "x0" (kbd "C-x 0"))
+    (key-chord-define-global "ii" (lambda () (interactive) (find-file "~/.emacs.d/init.el")))
+    (key-chord-define-global "LL" (lambda () (interactive) (find-file "~/org/life.org")))
+    (key-chord-define-global "PP" 'org-passwords)
     (key-chord-mode 1)))
 ;;; *** flycheck
 (use-package flycheck
   :ensure t)
+;;; *** hide-lines
+(use-package hide-lines
+  :ensure t)
+;;; *** help-at-pt
+(use-package help-at-pt
+  :config
+  (progn
+    (setq help-at-pt-display-when-idle t)
+    (setq help-at-pt-timer-delay 0.1)
+    (help-at-pt-set-timer)))
 ;;; ** Terminal
+;;; *** tramp
+(use-package tramp
+  :config
+  (setq tramp-methods
+        ;; add quotes qround %u to support domain\user
+        (mapcar
+         (lambda (method)
+           (let ((method-name (car method)))
+             (cons method-name
+                   (mapcar
+                    (lambda (prop)
+                      (let ((propname (car prop))
+                            (propvallist (cdr prop)))
+                        (cons propname
+                              (mapcar
+                               (lambda (propval)
+                                 (if (and (eq 'tramp-login-args propname) (string-equal "scp" method-name))
+                                     (mapcar
+                                      (lambda (arggroup)
+                                        (mapcar
+                                         (lambda (arg)
+                                           (if (string-equal arg "%u") "'%u'" arg)) arggroup))
+                                      propval)
+                                   propval))
+                               propvallist))))
+                    (cdr method))
+                   ))) tramp-methods)))
 ;;; *** multi-term
 (use-package multi-term
   :ensure t
@@ -424,6 +476,38 @@
   :commands shell
   :config
   (progn
+    (defun shell-active-space ()
+      (interactive)
+      (cond ((save-excursion
+               (beginning-of-line)
+               (looking-at "cd $"))
+             (helm :sources
+                   (helm-build-in-buffer-source "Projectile projects"
+                     :data 'projectile-relevant-known-projects
+                     :fuzzy-match helm-projectile-fuzzy-match
+                     :action '(("cd to project" .
+                                (lambda (project)
+                                  (insert project)
+                                  (comint-send-input)))))
+                   :buffer "*helm projectile*"
+                   :prompt (projectile-prepend-project-name "cd: "))
+             )
+            ((and
+              (save-excursion
+                (beginning-of-line)
+                (backward-char 1)
+                (beginning-of-line)
+                (or
+                 (looking-at "mysql>")
+                 (looking-at "[^ ]*:[^ ]*>")))
+              (save-excursion
+                (backward-char)
+                (and (looking-at "=")
+                     (re-search-backward " \\([^ ][^ =]*\\)"))))
+             (insert (sql-key-read (match-string 1)) " "))
+            
+            (t (insert " "))))
+    (define-key shell-mode-map " " 'shell-active-space)
     (use-package mysql-shell)
     (add-hook
      'shell-mode-hook
@@ -434,7 +518,19 @@
 ;;; *** cssh
 (use-package cssh
   :ensure t
-  :bind ("C-;" . cssh-term-remote-open))
+  :bind ("C-;" . shell-remote-open;cssh-term-remote-open
+         )
+  :config (progn
+            (cssh-define-global-bindings)))
+
+;;; *** shell-remote-open
+(defun shell-remote-open ()
+  "Prompt for a remote host to connect to, and open a shell there."
+  (interactive)
+  (let* ((remote-host (completing-read "Remote host: " (cssh-get-hosts-list)))
+         (default-directory (concat "/" remote-host ":")))
+    (shell (format "*shell/%s*" remote-host))))
+;(bind-key "C-;" 'shell-remote-open)
 
 ;;; ** External System Integration
 ;;; *** dig
@@ -453,6 +549,13 @@
   :ensure t
   :init
   (progn
+    ;; a little hack to address a bug in butler
+    (defun butler-handle-unknown-expected (orig-func timestamp expected)
+      (if (= -1 expected)
+          " |??????????| "
+        (funcall orig-func timestamp expected)))
+    
+    (advice-add 'generate-progress-string :around #'butler-handle-unknown-expected)
     (setq butler-server-list
           '((jenkins "Jenkins" (server-address . "http://merc.footnote.com:50000/jenkins/view/news/"))))
     (setq web-log-info nil)))
@@ -475,24 +578,14 @@
 
 ;;; *** magit
 (use-package magit
+;  :bind ("C-x g" . magit-status)
   :init
   (setq magit-last-seen-setup-instructions "1.4.0")
   :config
   (progn
-    '(defun endless/add-PR-fetch ()
-      "If refs/pull is not defined on a GH repo, define it."
-      (let ((fetch-address
-             "+refs/pull/*/head:refs/pull/origin/*"))
-        (unless (member
-                 fetch-address
-                 (magit-get-all "remote" "origin" "fetch"))
-          (when (string-match
-                 "github" (magit-get "remote" "origin" "url"))
-            (magit-git-string
-             "config" "--add" "remote.origin.fetch"
-             fetch-address)))))
-    ;;(add-hook 'magit-mode-hook #'endless/add-PR-fetch)
-    (magit-auto-revert-mode 0)
+    (setq magit-diff-refine-hunk 'all)
+    '(defalias 'vc-print-log 'magit-log-buffer-file )
+    (global-magit-file-buffer-mode 1)
     ))
 
 ;;; *** restclient
@@ -500,7 +593,7 @@
   :mode (("\\.rest$" . restclient-mode)))
 
 ;;; *** google-this
-(use-package google-this
+'(use-package google-this
   :bind ("s-g" . google-this-lucky-search))
 
 ;;; *** nodejs-repl
@@ -508,6 +601,17 @@
   :commands nodejs-repl)
 
 ;;; *** jabber
+
+;;playground for testing helm features
+'(helm :sources `((name . "the name")
+                 (candidates . ,(mapcar (lambda (x) x;(cons x (rot13 x))
+                                          ) '("a" "b" "c" "d")))
+                 (real-to-display . rot13)
+                 (candidate-transformer (lambda (list) (mapcar 'rot13 list)))
+                 ))
+
+
+
 (use-package jabber
   :ensure t
   :commands jabber-connect-all
@@ -515,25 +619,183 @@
   :defer 5
   :config
   (progn
-    (setq starttls-extra-arguments (list "--insecure" ))
-    ;; Make ctrl-return not submit
-    (add-hook 'jabber-chat-mode-hook
-              (lambda () (bind-key "<C-return>" (lambda () (interactive) (insert "\n")) jabber-chat-mode-map)))
+    ;(setq starttls-extra-arguments (list "--insecure" ))
+
     (add-hook 'jabber-chat-mode-hook 'visual-line-mode)
+
+    ;; get backlog by pressing up past top
+    (defun previous-line-or-jabber-backlog ()
+      (interactive)
+      (condition-case nil (previous-line)
+        (error
+         (message "Loading jabber history" )
+         (jabber-chat-display-more-backlog 1))))
+    (bind-key "<up>" 'previous-line-or-jabber-backlog jabber-chat-mode-map)
+    (bind-key "C-p" 'previous-line-or-jabber-backlog jabber-chat-mode-map)
+
+    ;; helmize it
+    (defun helm-jabber-chat-source (name face filter)
+      `((name . ,name)
+        (candidates . ,(remove-if-not filter (jabber-concat-rosters)))
+        (real-to-display . (lambda (x) (propertize (or (get x 'name) (symbol-name x)) 'face ',face)))
+        (action . (lambda (x)
+                    (jabber-chat-with
+                     (jabber-read-account)
+                     (symbol-name x))))))
+    
+    (defun helm-jabber-chat-with ()
+      (interactive)
+      (helm :sources (list (helm-jabber-chat-source "Jabber Online Contacts"
+                                                    'jabber-roster-user-online (lambda (x) (get x 'connected)))
+                           (helm-jabber-chat-source "Jabber Offline Contacts"
+                                                    'jabber-roster-user-offline (lambda (x) (not (get x 'connected)))))))
+    (bind-key "C-j" 'helm-jabber-chat-with jabber-global-keymap)
+    
     ;; get jabber and dired-x to coexist
     (bind-key "C-x C-j" 'dired-jump)
     (bind-key "C-x 4 C-j" 'dired-jump-other-window)
     (bind-key* "C-c C-j" jabber-global-keymap)
     (jabber-connect-all)))
+
+
 ;;; *** play-sound
 (unless (and (fboundp 'play-sound-internal)
              (subrp (symbol-function 'play-sound-internal)))
   (use-package play-sound))
+;;; *** emms
+(use-package emms-player-mplayer
+  :config
+  (progn
+    (define-emms-simple-player afplay '(file)
+      (regexp-opt '(".mp3" ".m4a" ".aac"))
+      "afplay")
+    (setq emms-player-list `(,emms-player-afplay))))
+
+;;; *** emacs-eclim
+(use-package eclim
+  :ensure emacs-eclim
+  :config
+  (progn
+
+    ;; Configuration
+    (global-eclim-mode)
+    (defun eclim-set-sole-autocomplete ()
+      (setq ac-sources '(ac-source-emacs-eclim)))
+    (add-hook 'java-mode-hook 'eclim-set-sole-autocomplete)
+    (custom-set-variables
+     '(eclim-eclipse-dirs '("/Applications/Eclipse.app/Contents/Eclipse/"))
+     '(eclim-executable "/Applications/Eclipse.app/Contents/Eclipse/eclim"))
+    (use-package ac-emacs-eclim-source)
+    (use-package eclimd
+      :config
+      (progn
+        (setq eclimd-default-workspace "/Users/rblack/Documents/workspace"
+              eclimd-wait-for-process nil))
+      )
+    (eclim-problems-show-errors)
+    (key-chord-define eclim-mode-map "DD" 'eclim-java-show-documentation-for-current-element)
+
+    ;; Patches
+    
+    ;; workaround for bug in files with # in their names.  Eclim
+    ;; doesn't like them because it prepends a file:/// and tries to
+    ;; parse as url, and # isn't a valid char in url.  Fix is to
+    ;; url-escape with %23
+    (defun eclim--escape-hash-filenames (orig-func &rest args)
+      (let ((last-was-f))
+        (mapcar
+         (lambda (arg)
+           (when last-was-f
+             (setq arg (replace-regexp-in-string "#" "%23" arg)))
+           (setq last-was-f (string-equal "-f" arg))
+           arg)
+         (apply orig-func args))))
+
+    (advice-add 'eclim--expand-args :around #'eclim--escape-hash-filenames)
+
+    (defun eclim--call-process-async (callback &rest args)
+      "Like `eclim--call-process', but the call is executed
+asynchronously. CALLBACK is a function that accepts a list of
+strings and will be called on completion."
+      (lexical-let ((handler callback)
+                    (cmd (eclim--make-command args)))
+        (when (not (find cmd eclim--currently-running-async-calls :test #'string=))
+          (lexical-let
+              ((buf (get-buffer-create (generate-new-buffer-name "*eclim-async*")))
+               (tempfile (make-temp-file "eclim")))
+            (when eclim-print-debug-messages
+              (message "Executing: %s" cmd)
+              (message "Using async buffer %s" buf)
+              (message "Using temp file %s" tempfile))
+            (push cmd eclim--currently-running-async-calls)
+
+            (let ((proc (start-process-shell-command "eclim" buf (concat (eclim--make-command args) ">" tempfile))))
+              (let ((sentinel (lambda (process signal)
+                                (unwind-protect
+                                    (save-excursion
+                                      (setq eclim--currently-running-async-calls (remove-if (lambda (x) (string= cmd x)) eclim--currently-running-async-calls))
+                                      (with-current-buffer buf
+                                        (insert-file-contents-literally tempfile)
+                                        (delete-file tempfile)
+                                        (funcall handler (eclim--parse-result (buffer-substring 1 (point-max))))))
+                                  (kill-buffer buf)))))
+                (set-process-sentinel proc sentinel)))))))
+
+
+    ;; so that when a problem is corrected, we refresh the problems so
+    ;; it goes away
+    (defun eclim-refresh-problems-if-necessary (&rest args)
+      (when (and (string-equal (car args) "java_correct")
+                 (member "-a" args))
+        (eclim-problems-buffer-refresh)))
+
+    (advice-add 'eclim--call-process :after #'eclim-refresh-problems-if-necessary)
+    ;;(advice-remove 'eclim--call-process #'eclim-refresh-problems-if-necessary)
+
+    (advice-add 'eclim--complete :after #'eclim--problems-update-maybe)
+
+    (defun eclim-next-error ()
+      "Go to the next error if there is one"
+      (interactive)
+      (loop
+       with point = (point)
+       with current = (eq (get-char-property point 'category) 'eclim-problem)
+       with problem
+       do (setq point (next-overlay-change point)
+                problem (eq (get-char-property point 'category) 'eclim-problem))
+       when (and current (not problem)) do (setq current nil)
+       when (and (not current) problem) do (goto-char point) and return nil
+       when (eq point (point-max)) do (with-temp-message "No more errors" (sleep-for .75)) and return nil))
+
+    (defun eclim-previous-error ()
+      "Go to the previous error if there is one"
+      (interactive)
+      (loop
+       with point = (point)
+       with current = t
+       with problem
+       do (setq point (previous-overlay-change point)
+                problem (eq (get-char-property point 'category) 'eclim-problem))
+       when (and current (not problem)) do (setq current nil)
+       when (and (not current) problem) do (goto-char point) and return nil
+       when (eq point (point-min)) do (with-temp-message "No previous errors" (sleep-for .75)) and return nil))
+
+    ;; Key Bindings
+    (define-key eclim-mode-map (kbd "C-c C-e c") 'eclim-java-call-hierarchy)
+    (define-key eclim-mode-map (kbd "C-c C-e q") 'eclim-problems-correct)
+    (define-key eclim-mode-map (kbd "s-,") 'eclim-previous-error)
+    (define-key eclim-mode-map (kbd "s-.") 'eclim-next-error))
+  )
 
 ;;; ** Getting Around (search, navigation)
 ;;; *** ace-jump-mode
-(use-package ace-jump-mode
+'(use-package ace-jump-mode
   :bind* ("M-j" . ace-jump-mode))
+
+;;; *** avy
+(use-package avy
+  :bind* ("M-j" . avy-goto-char-timer)
+  :config (setq avy-timeout-seconds .3))
 
 ;;; *** projectile
 (setq helm-projectile-fuzzy-match t)
@@ -587,7 +849,8 @@
     (add-to-list 'grep-find-ignored-files "*.log")
     (add-to-list 'grep-find-ignored-files "*.log.*")
     (add-to-list 'grep-find-ignored-files "#*#")
-    (add-to-list 'grep-find-ignored-files "#.orig")
+    (add-to-list 'grep-find-ignored-files "*.orig")
+    (add-to-list 'grep-find-ignored-files "*.phar")
     (add-to-list 'grep-find-ignored-directories "templates_c")
     (add-to-list 'grep-find-ignored-directories "ci_system")
     (add-to-list 'grep-find-ignored-directories "bin5")
@@ -607,8 +870,22 @@
 
 ;;; *** swiper
 (use-package swiper
-  :bind (("C-s" . swiper)
-         ("C-r" . swiper)) )
+  :bind (("C-s" . swiper-or-isearch-forward)
+         ("C-r" . swiper-or-isearch-backward))
+  :config
+  (progn
+    (setq isearch-modes '(shell-mode term-mode Info-mode messages-buffer-mode))
+    (setq ivy-display-style 'fancy)
+    (defun swiper-or-isearch-forward ()
+      (interactive)
+      (if (member major-mode isearch-modes)
+          (call-interactively 'isearch-forward)
+        (call-interactively 'swiper)))
+    (defun swiper-or-isearch-backward ()
+      (interactive)
+      (if (member major-mode isearch-modes)
+          (call-interactively 'isearch-backward)
+        (call-interactively 'swiper)))))
 
 
 ;;; *** cmds.c
@@ -617,19 +894,29 @@
   (bind-key "s-<left>" 'beginning-of-line))
 
 ;;; *** smex
-(use-package smex
-  :bind (("M-x" . smex)
-         ("M-X" . smex-major-mode-commands)
-         ;; This is your old M-x.
-         ("M-s-≈" . execute-extended-command) ; this is alt-command-x
-         ;; (global-set-key (kbd "M-x") 'execute-extended-command)
-         ))
+'(use-package smex
+  :bind* (("M-x" . smex)
+          ("M-X" . smex-major-mode-commands)
+          ;; This is your old M-x.
+          ("M-s-≈" . execute-extended-command) ; this is alt-command-x
+          ;; (global-set-key (kbd "M-x") 'execute-extended-command)
+          ))
 ;;; *** ido
 (use-package ido
   :init
   (ido-mode 1)
   :config
   (progn
+    (setq ido-use-filename-at-point 'guess)
+    (defun my-ffap-guesser (orig-func &rest args)
+      (let* ((ffap-url-regexp nil)
+             (retval (apply orig-func args)))
+        (if (or
+             (member retval '("/" "/**" "//"))
+             (eq major-mode 'dired-mode))
+            nil
+          retval)))
+    (advice-add 'ffap-guesser :around #'my-ffap-guesser)
     (ido-everywhere 1)
     ;;(flx-ido-mode 1)
     (setq ido-enable-flex-matching t)
@@ -641,29 +928,30 @@
       (progn
         (ido-ubiquitous-mode 1)))
 
-    (use-package idomenu
-      :bind ("s-r" . idomenu)
-      :config
-      (progn
-        (defun flatten-index (i prefix)
-          (let* ((name (car i))
-                 (qname (if (> (length prefix) 0) (concat prefix "." name) name))
-                 (d (cdr i)))
-            (if (listp d)
-                (cl-reduce
-                 'append
-                 (mapcar (lambda (subindex) (flatten-index subindex qname)) d))
-              (list (cons qname d)))))
+    '(use-package idomenu
+       :bind ("s-r" . idomenu)
+       :config
+       (progn
+         (defun flatten-index (i prefix)
+           (let* ((name (car i))
+                  (qname (if (> (length prefix) 0) (concat prefix "." name) name))
+                  (d (cdr i)))
+             (if (listp d)
+                 (cl-reduce
+                  'append
+                  (mapcar (lambda (subindex) (flatten-index subindex qname)) d))
+               (list (cons qname d)))))
 
-        (defadvice idomenu--read (around idomenu--read-flatten
-                                         (index-alist &optional prompt guess)
-                                         activate )
-          "Flatten hierarchical indexes that get passed to this function"
-          (let ((index-alist (flatten-index (cons "" index-alist) "")))
-            ad-do-it))))
+         (defadvice idomenu--read (around idomenu--read-flatten
+                                          (index-alist &optional prompt guess)
+                                          activate )
+           "Flatten hierarchical indexes that get passed to this function"
+           (let ((index-alist (flatten-index (cons "" index-alist) "")))
+             ad-do-it))))
 
-    '(defun find-file-sudo ()
+    (defun find-file-sudo ()
       "Find file as root if necessary."
+      (interactive)
       (when buffer-file-name
         (unless (file-writable-p buffer-file-name)
           (message "file is %s" buffer-file-name)
@@ -678,56 +966,6 @@
     '(advice-remove 'ido-find-file  #'find-file-sudo)
     ))
 
-;;; *** fiplr
-'(use-package fiplr
-  :ensure t
-  :commands (dfo dbo sfo sbo lfo lbo nco)
-  :bind (("s-P" . choose-fiplr-directory)
-         ("s-p" . fiplr-find-file)
-         ("s-F" . dfo)
-         ("s-B" . dbo)
-         ("s-C" . nco))
-  :config
-  (progn
-    (setq fiplr-ignored-globs
-          '(
-            (directories (".git" ".svn" ".hg" ".bzr" "bin" "bin5" "docs" "templates_c"))
-            (files (".#*" "*~" "*.so" "*.jpg" "*.png" "*.gif" "*.pdf" "*.gz" "*.zip" "*.class" "*/"))))
-
-
-    (defvar fiplr-directory-history nil "History list for fiplr find")
-    (setq fiplr-directory-history nil)
-                                        ; Project-specific finders
-    (defun choose-fiplr-directory (dir)
-      (interactive
-       (list
-        (let* ((file-name-history fiplr-directory-history)
-               (history-delete-duplicates t)
-               (fiplr-root (fiplr-root))
-               (initial
-                (if fiplr-directory-history
-                    (find-if (lambda(e) (not (equal (expand-file-name e) (expand-file-name fiplr-root)))) fiplr-directory-history)
-                  fiplr-root)))
-          (car (add-to-history
-                'fiplr-directory-history
-                (read-file-name-default "Search in directory: " initial initial t nil 'file-directory-p))))))
-      (fiplr-find-file-in-directory dir fiplr-ignored-globs))
-
-    (defun dfo ()
-      (interactive) (fiplr-find-file-in-directory "/Users/rblack/code/hg/news-dev-frontend" fiplr-ignored-globs))
-    (defun dbo ()
-      (interactive) (fiplr-find-file-in-directory "/Users/rblack/code/hg/news-dev-backend" fiplr-ignored-globs))
-    (defun sfo ()
-      (interactive) (fiplr-find-file-in-directory "/Users/rblack/code/hg/news-stage-frontend" fiplr-ignored-globs))
-    (defun sbo ()
-      (interactive) (fiplr-find-file-in-directory "/Users/rblack/code/hg/news-stage-backend" fiplr-ignored-globs))
-    (defun lfo ()
-      (interactive) (fiplr-find-file-in-directory "/Users/rblack/code/hg/news-live-frontend" fiplr-ignored-globs))
-    (defun lbo ()
-      (interactive) (fiplr-find-file-in-directory "/Users/rblack/code/hg/news-live-backend" fiplr-ignored-globs))
-    (defun nco ()
-      (interactive) (fiplr-find-file-in-directory "/Users/rblack/code/hg/news-config" fiplr-ignored-globs))
-    ))
 ;;; *** mwheel
 (use-package mwheel
   :init
@@ -739,7 +977,6 @@
     (setq scroll-step 1) ;; keyboard scroll one line at a time
     ))
 
-;;; jenkins-build
 ;;; *** recentf
 (use-package recentf
   :init
@@ -755,10 +992,36 @@
 ;;; *** helm
 ;; better word navigation
 (use-package helm
-  :commands (helm-resume
-             helm-recentf))
+  :bind* (("M-x" . helm-M-x ;;execute-extended-command
+           )
+          ("s-r" . helm-imenu)
+          ;("M-y" . helm-show-kill-ring) ;; find something better to bind this to. 
+          ("C-h a" . helm-apropos)
+          ("C-h SPC" . helm-all-mark-rings)
+          ("C-x C-f" . helm-find-files)
+          ("s-g" . helm-google-suggest))
+  :commands (helm-resume)
+  :config (progn
+            (helm-mode)
+            (custom-set-variables
+             '(helm-imenu-fuzzy-match t)
+             '(helm-apropos-fuzzy-match t)
+             '(helm-autoresize-min-height helm-autoresize-max-height)
+             )
+            (bind-key "M-r" 'helm-comint-input-ring shell-mode-map )
+            (diminish 'helm-mode)
+            (defalias 'man 'helm-man-woman)
+            (helm-autoresize-mode t)))
 
 ;;; ** Major Modes
+;;; *** python-mode
+(use-package python-mode
+  :ensure t
+  :mode "\\.py$"
+  :config
+  (progn
+    (setq py-jython-command "/usr/local/bin/jython")))
+
 ;;; *** js2-mode
 (use-package js2-mode
   :ensure t
@@ -779,6 +1042,12 @@
     (use-package js2-refactor
       :ensure t
       :config (js2r-add-keybindings-with-prefix "C-j"))))
+
+(use-package tern-auto-complete
+  :config
+  (progn
+    (tern-ac-setup)
+    (add-hook 'js2-mode-hook 'tern-mode)))
 
 ;;; *** json-mode
 (use-package json-mode
@@ -813,21 +1082,20 @@
 
 ;;; *** php-mode
 
+(defun maio/electric-semicolon ()
+  (interactive)
+  (end-of-line)
+  (when (not (looking-back ";"))
+    (insert ";")))
+
 (use-package php-mode
   :ensure t
   :mode (("\\.inc\\'" . php-mode)
          ("\\.php\\'" . php-mode))
   :config
   (progn
-
-    (defun maio/electric-semicolon ()
-      (interactive)
-      (end-of-line)
-      (when (not (looking-back ";"))
-        (insert ";")))
     
     (define-key php-mode-map ";" 'maio/electric-semicolon)
-    
     (add-hook 'php-mode-hook 'smartparens-mode)
     (setq php-mode-coding-style 'symfony2)
     (bind-key [(control .)] nil php-mode-map)
@@ -837,6 +1105,8 @@
       :ensure t
       :config
       (add-hook 'php-mode-hook 'php-eldoc-enable))
+    (use-package php-extras
+      :ensure t)
     '(use-package flymake-php ;; using flycheck now
        :ensure t
        :config
@@ -847,6 +1117,14 @@
   :commands geben
   :config
   (progn
+    ;; The following bookmarks are useful for php debugging
+    ;; Reload in PHP Debugger
+    ;; javascript:document.cookie = "XDEBUG_SESSION=1";document.location.reload()
+    ;; Start PHP Debugger
+    ;; javascript:(function(){document.cookie = "XDEBUG_SESSION=1"})()
+    ;; Stop PHP Debugger
+    ;; javascript:(function(){document.cookie = "XDEBUG_SESSION=; expires=Thu, 01 Jan 1970 00:00:01 GMT;"})()
+    
     ;; geben tooltip
     (defun geben-eval-tooltip (window object pos)
       (when (eq object (current-buffer))
@@ -906,6 +1184,10 @@
       (let ((inhibit-read-only t))
         (put-text-property (point-min) (point-max) 'help-echo 'geben-eval-tooltip)))
 
+    (defun geben-find-current-file ()
+      (interactive)
+      (let ((line (line-number-at-pos (point)))) (geben-dbgp-command-source (car geben-sessions) (concat "file://" (buffer-file-name))) (goto-line line)))
+
     (add-hook 'geben-mode-hook 'geben-install-tooltip)
 
     ;; this is from http://www.dave-cohen.com/node/1000010  There's other good stuff there too
@@ -955,15 +1237,34 @@
   (progn
 
     (defun my-c-setup ()
-      (c-set-offset 'substatement-open 0))
+      (c-set-offset 'substatement-open 0)
+      (add-to-list 'imenu-generic-expression
+                   '("Lisp Function" "\\s-*DEFUN\\s-*(\\s-*\"\\([^\"]*\\)" 1)))
 
-    
     (add-hook 'java-mode-hook 'better-java-indexing)
     (add-hook 'java-mode-hook 'smartparens-mode)
     (add-hook 'c-mode-hook 'my-c-setup)
     (add-hook 'java-mode-hook 'my-c-setup)
-    (define-key c-mode-map ";" 'maio/electric-semicolon)
-
+    (define-key c-mode-base-map ";" 'maio/electric-semicolon)
+    
+    (defun c-newline ()
+      "Inserts a blank line for new braces"
+      (interactive)
+      (call-interactively 'newline)
+      (when (and (looking-at "}")
+                 (save-excursion
+                   (previous-line)
+                   (let* ((p1 (line-beginning-position))
+                          (p2 (line-end-position))
+                          (line (buffer-substring-no-properties p1 p2)))
+                     (string-match "{[ \t]*$" line))
+                   ))
+        (newline)
+        (indent-according-to-mode)
+        (previous-line)
+        (indent-according-to-mode)))
+    (define-key c-mode-base-map (kbd "RET") 'c-newline)
+    
     (setq c-default-style '((java-mode . "java")
                             (awk-mode . "awk")
                             (other . "gnu")))
@@ -1006,7 +1307,7 @@
 
 ;;; *** vtl
 (use-package vtl
-  :mode ".*/email.*\\.txt$")         ;opens our email templates as vtl
+  :mode (".*/email.*\\.txt$" . vtl-mode))       ;opens our email templates as vtl
 
 ;;; *** lisp-mode
 
@@ -1020,6 +1321,7 @@
   :config
   (progn
 
+    (add-hook 'ielm-mode-hook 'enable-paredit-mode)
     (defun eval-and-replace ()
       "Replace the preceding sexp with its value."
       (interactive)
@@ -1031,9 +1333,18 @@
                (insert (current-kill 0)))))
 
     (defun my-emacs-lisp-mode-hook ()
-      (add-hook 'after-save-hook 'check-parens nil t))
+      (add-hook 'after-save-hook 'check-parens nil t)
+      (add-to-list 'imenu-generic-expression
+                   '("Used Packages"
+                     "\\(^\\s-*(use-package +\\)\\(\\_<.+\\_>\\)" 2)))
 
     (add-hook 'emacs-lisp-mode-hook 'my-emacs-lisp-mode-hook)
+
+    (bind-key "C-h C-f" 'find-function-at-point emacs-lisp-mode-map)
+    (bind-key "C-h C-f" 'find-function-at-point lisp-interaction-mode-map)
+
+    (bind-key "C-h C-v" 'find-variable-at-point emacs-lisp-mode-map)
+    (bind-key "C-h C-v" 'find-variable-at-point lisp-interaction-mode-map)
     
     (use-package paredit
       :config
@@ -1074,12 +1385,18 @@
   :ensure t
   :defer 5
   :config (progn
-	    (global-auto-complete-mode)
-	    (diminish 'auto-complete-mode)))
+            (ac-config-default)
+            (diminish 'auto-complete-mode)))
 
 ;;; *** apples-mode
 (use-package apples-mode
   :mode "\\.\\(applescri\\|sc\\)pt\\'"
+  :ensure t
+  :config (bind-key "C-c C-c" 'apples-run-region/buffer apples-mode-map))
+
+;;; *** groovy-mode
+(use-package groovy-mode
+  :mode "\\.gradle$"
   :ensure t)
 
 ;;; *** csv-mode
@@ -1095,6 +1412,22 @@
 (use-package conf-mode
   :mode "\\.hgrc$"
   :ensure t)
+;;; *** ses
+(use-package ses-mode
+  :mode "\\.ses$"
+  :ensure ses
+  :init (add-hook 'ses-mode-hook 'linum-mode))
+;;; *** calc
+(use-package calc
+  :config
+  (defun calc-call (fun &rest args)
+    (string-to-number
+     (math-format-value
+      (apply
+       (intern (concat "calcFunc-" (symbol-name fun)))
+       (mapcar
+        (lambda (s) (math-read-number-simple (number-to-string s)))
+        args))))))
 ;;; ** File, Window and Buffer Management
 ;;; *** windmove
 (use-package windmove
@@ -1114,7 +1447,6 @@
 ;;; *** buffer.c
 (progn                                  ;buffer.c
   (bind-key* "C-x C-k" 'kill-this-buffer)
-  (bind-key* "s-w" 'kill-this-buffer)
   ;; some bindings from- http://www.masteringemacs.org/articles/2014/02/28/my-emacs-keybindings/
   (defun kill-this-buffer ()
     (interactive)
@@ -1149,27 +1481,59 @@
   :init (winner-mode 1))
 
 ;;; *** files.el
-(progn   ;files.el
-  ;; Settings for backups -- move emacs terds into separate dir
-
+(progn                                  ;files.el
+  
+  ;; Settings for backups
   (setq make-backup-files t
         vc-make-backup-files t
         delete-old-versions t
-        kept-new-versions 100
+        kept-new-versions 200
         kept-old-versions 0
         backup-by-copying t
-        version-control t)
-  (setq backup-dir  "~/.saves")
+        version-control t
+        backup-dir  "~/.saves"
+        backup-directory-alist `(("." . ,backup-dir))
+        tramp-backup-directory-alist backup-directory-alist)
+
+  ;; make sure backup directory exists
   (if (not (file-exists-p backup-dir))
       (make-directory backup-dir))
-  (setq backup-directory-alist `(("." . ,backup-dir)))
-  
+
+  ;; force backup on every save
   (defun force-backup-of-buffer ()
     (setq buffer-backed-up nil))
-
   (add-hook 'before-save-hook 'force-backup-of-buffer)
-  ;; this is what tramp uses
-  (setq tramp-backup-directory-alist backup-directory-alist))
+
+
+  ;; Color colors in theme files
+  (defun hexcolour-luminance (color)
+    "Calculate the luminance of a color string (e.g. \"#ffaa00\", \"blue\").
+  This is 0.3 red + 0.59 green + 0.11 blue and always between 0 and 255."
+    (let* ((values (x-color-values color))
+           (r (car values))
+           (g (cadr values))
+           (b (caddr values)))
+      (floor (+ (* .3 r) (* .59 g) (* .11 b)) 256)))
+
+  (defun hexcolour-add-to-font-lock ()
+    (interactive)
+    (font-lock-add-keywords
+     nil
+     `((,(concat "#[0-9a-fA-F]\\{3\\}[0-9a-fA-F]\\{3\\}?\\|"
+                 (regexp-opt (x-defined-colors) 'words))
+        (0 (let ((colour (match-string-no-properties 0)))
+             (put-text-property
+              (match-beginning 0) (match-end 0)
+              'face `((:foreground ,(if (> 128.0 (hexcolour-luminance colour))
+                                        "white" "black"))
+                      (:background ,colour)))))))))
+
+  (defun color-if-theme (&rest args)
+    (if (s-ends-with-p "-theme.el" (buffer-file-name))
+        (hexcolour-add-to-font-lock)))
+
+  (add-hook 'find-file-hook 'color-if-theme)
+  )
 
 ;;; *** backup-walker
 (use-package backup-walker
@@ -1181,6 +1545,86 @@
   :defer t
   :config
   (progn
+    (progn ;; from http://stackoverflow.com/questions/19907939/how-can-one-quickly-browse-through-lots-of-files-in-emacs
+      ;; little modification to dired-mode that let's you browse through lots of files
+      (add-hook 'dired-mode-hook
+                (lambda()
+                  (define-key dired-mode-map (kbd "C-o") 'dired-view-current)     ; was dired-display-file
+                  (define-key dired-mode-map (kbd "n")   'dired-view-next)           ; was dired-next-line
+                  (define-key dired-mode-map (kbd "p")   'dired-view-previous))) ; was dired-previous-line
+
+      (defun dired-view-next ()
+        "Move down one line and view the current file in another window."
+        (interactive)
+        (dired-next-line 1)
+        (dired-view-current))
+
+      (defun dired-view-previous ()
+        "Move up one line and view the current file in another window."
+        (interactive)
+        (dired-previous-line 1)
+        (dired-view-current))
+
+      (defun dired-view-current ()
+        "View the current file in another window (possibly newly created)."
+        (interactive)
+        (require 'windmove)
+        (if (not (window-parent))
+            (split-window))                                   ; create a new window if necessary
+        (let ((file (dired-get-file-for-visit))
+              (dbuffer (current-buffer)))
+          (other-window 1)                                          ; switch to the other window
+          (unless (equal dbuffer (current-buffer))                 ; don't kill the dired buffer
+            (if (or view-mode (equal major-mode 'dired-mode))   ; only if in view- or dired-mode
+                (kill-buffer)))                                                    ; ... kill it
+          (let ((filebuffer (get-file-buffer file)))
+            (if filebuffer                              ; does a buffer already look at the file
+                (switch-to-buffer filebuffer)                                    ; simply switch 
+              (view-file file))                                                    ; ... view it
+            '(text-scale-set -2) ;; shrink for newspapers
+            ) 
+          (let ((pdffile (replace-regexp-in-string "\\.txt$" ".pdf" file)))
+            (when (file-exists-p pdffile)
+              (if (windmove-find-other-window 'right)
+                  (select-window (windmove-find-other-window 'right) t)
+                (split-window-right)
+                (other-window 1))
+              (view-file pdffile)))
+          (other-window -2) ; give the attention back to the dired buffer
+          ))
+      )
+
+    (defun dired-virtual-vanilla ()
+      (interactive)
+      (let ((bufname (concat "*Dired " (buffer-name) "*"))
+            (line (line-number-at-pos (point))))
+        (ignore-errors (kill-buffer bufname))
+        (dired (cons bufname (split-string (buffer-string) "\n" t)))
+        (goto-line (+ 1 line))
+        (dired-move-to-filename)))
+
+    (defun dired-view-corresponding-pdf ()
+      "View the current file in another window (possibly newly created)."
+      (interactive)
+      (if (not (window-parent))
+          (split-window))                                   ; create a new window if necessary
+      (let ((file (replace-regexp-in-string "\\.txt$" ".pdf" (dired-get-file-for-visit)))
+            (dbuffer (current-buffer)))
+        (other-window 1)                                          ; switch to the other window
+        (unless (equal dbuffer (current-buffer))                 ; don't kill the dired buffer
+          (if (or view-mode (equal major-mode 'dired-mode))   ; only if in view- or dired-mode
+              (kill-buffer)))                                                    ; ... kill it
+        (let ((filebuffer (get-file-buffer file)))
+          (if filebuffer                              ; does a buffer already look at the file
+              (switch-to-buffer filebuffer)                                    ; simply switch 
+            (view-file file))                                                    ; ... view it
+          (other-window -1))))
+
+    
+    (add-hook 'dired-mode-hook
+              (lambda()
+                (define-key dired-mode-map (kbd "P")   'dired-view-corresponding-pdf)))
+    
     (add-hook 'dired-load-hook
               (lambda ()
                 (load "dired-x")))
@@ -1279,7 +1723,7 @@
   :init
   (progn
     (savehist-mode 1)
-    (setq savehist-ignored-variables '(ido-file-history))
+    (setq savehist-ignored-variables '(hist)) ;;not sure what hist is, but it's not a list so autosave croaks on it
     (setq savehist-additional-variables '(kill-ring search-ring regexp-search-ring))))
 
 ;;; *** jka-cmpr-hook
@@ -1305,12 +1749,13 @@
 (use-package org
   :commands org-mode
   :mode ("\\.org$" . org-mode)
-  :bind
+  :bind*
   (( "C-c l" . org-store-link)
    ( "C-c c" . org-capture)
    ( "C-c a" . org-agenda)
    ( "C-c C-x C-i" . org-clock-in)
    ( "C-c C-x C-o" . org-clock-out)
+   ( "C-c C-x C-j" . org-clock-goto)
    ;; these come from mac shortcut keys (automator services)
    ;;( "s-O" . org-capture)
    ( "<C-f9>" . org-capture-mail)
@@ -1318,6 +1763,25 @@
    )
   :config
   (progn
+
+    (key-chord-define org-mode-map "**" 'org-ctrl-c-star)
+    (add-hook 'org-mode-hook
+              (lambda ()
+                (push '("->" . ?→) prettify-symbols-alist)
+                (prettify-symbols-mode 1)))
+    
+    (add-hook 'org-mode-hook
+              (lambda ()
+                (set-face-attribute 'org-table nil :inherit 'fixed-pitch)
+                (set-face-attribute 'org-code nil :inherit 'fixed-pitch)))
+
+    ;; fixup links 
+    (defun org-html-link-merc (orig-func &rest args)
+      (replace-regexp-in-string "file:///Users/rblack/code/hg/\\([^/]+\\)/" "http://merc.footnote.com/\\1/file/tip/"
+                                (apply orig-func args)))
+
+    (advice-add 'org-export-file-uri :around 'org-html-link-merc)
+    
     (set-face-attribute 'org-table nil :inherit 'fixed-pitch)
     (defun org-capture-mail ()
       (interactive)
@@ -1442,28 +1906,56 @@ applied."
 :CREATED: %U
 :END:")
             ("M" "Work Meeting" entry (file+olp "~/org/life.org" "Work" "Meetings")
-             "* %T Meeting: %?")
+             "* %T Meeting: %? %i
+:PROPERTIES:
+:CREATED: %U
+:END:")
             ("m" "Mail" entry (file+olp "~/org/life.org" "Work" "Tasks")
-             "* TODO %(org-mac-message-get-links)%?")
+             "* TODO %(org-mac-message-get-links)%? %i
+:PROPERTIES:
+:CREATED: %U
+:END:")
             ("c" "Mail" entry (file+olp "~/org/life.org" "Work" "Tasks")
-             "* TODO %(org-mac-chrome-get-frontmost-url)%?")
+             "* TODO %(org-mac-chrome-get-frontmost-url)%? %i
+:PROPERTIES:
+:CREATED: %U
+:END:")
             ("l" "Work TODO with link" entry (file+headline "~/org/life.org" "Work")
-             "* TODO %?\n  %i\n  %a")
+             "* TODO %?\n  %i\n  %a
+:PROPERTIES:
+:CREATED: %U
+:END:")
             ("b" "Buy" entry (file+headline "~/org/life.org" "Shopping")
-             "* TODO %?")
+             "* TODO %? %i
+:PROPERTIES:
+:CREATED: %U
+:END:")
             ("r" "Rental Business" entry (file+olp "~/org/life.org" "Rental Business" "Tasks")
-             "* TODO %?")
+             "* TODO %? %i
+:PROPERTIES:
+:CREATED: %U
+:END:")
             ("h" "Home TODO" entry (file+olp "~/org/life.org" "Home" "Tasks")
-             "* TODO %?\n  %i\n")
+             "* TODO %?\n %i
+:PROPERTIES:
+:CREATED: %U
+:END:")
             ("s" "SAR TODO" entry (file+olp "~/org/life.org" "SAR" "Tasks")
-             "* TODO %?\n  %i\n")
+             "* TODO %?\n  %i
+:PROPERTIES:
+:CREATED: %U
+:END:")
             ("t" "General TODO" entry (file+headline "~/org/life.org" "Tasks")
-             "* TODO %?\n  %i\n")
+             "* TODO %?\n  %i
+:PROPERTIES:
+:CREATED: %U
+:END:")
             ("p" "Password" entry (file org-passwords-file)
              "* %^{Title|%(org-passwords-chrome-title)}
 :PROPERTIES:
 :URL: %^{URL|%(org-passwords-chrome-url)}
 :PASSWORD: %^{PASSWORD|%(org-passwords-generate-password-without-symbols nil 15)}
+:CREATED: %U
 :END:
 %^{USERNAME}p")))
     (use-package org-crypt
@@ -1479,15 +1971,18 @@ applied."
       :config (message "org-mac-link loaded"))
     ))
 
+;;; ** ox-reveal
+(use-package ox-reveal)
 ;;; ** org-passwords
 (use-package org-passwords
-  :bind ( "C-*" . org-passwords)
+  :bind ( "C-*" . org-passwords) ; this is the binding that gets invoked by the applescript.
+  :commands org-passwords
   :demand t
   :config
   (progn
     (setq org-passwords-random-words-dictionary "/usr/share/dict/words")
-    (bind-key "C-c u" 'org-passwords-copy-username org-passwords-mode-map)
-    (bind-key (kbd "C-c p") 'org-passwords-copy-password org-passwords-mode-map)))
+    (key-chord-define org-passwords-mode-map "PP" 'org-passwords-copy-password)
+    (key-chord-define org-passwords-mode-map "UU" 'org-passwords-copy-username)))
 
 ;;; ** midnight
 (use-package midnight
@@ -1536,10 +2031,31 @@ Requires ImageMagick installation"
   :config
   (define-key artist-mode-map [down-mouse-3] 'artist-mouse-choose-operation))
 ;;; ** ediff
+
+
+
+
 (use-package ediff
   :defer t
   :config
   (progn
+
+    ;; restores window configuration when ediff quits
+    (defun my-ediff-load-hook ()
+      (add-hook 'ediff-before-setup-hook
+                (lambda ()
+                  (setq ediff-saved-window-configuration (current-window-configuration))))
+      
+      (let ((restore-window-configuration
+             (lambda ()
+               (set-window-configuration ediff-saved-window-configuration))))
+        (add-hook 'ediff-quit-hook restore-window-configuration 'append)
+        (add-hook 'ediff-suspend-hook restore-window-configuration 'append)))
+
+    ;;(add-hook 'ediff-load-hook 'my-ediff-load-hook)
+    (my-ediff-load-hook)
+
+    
     (defun ediff-copy-both-to-C ()
       (interactive)
       (let ((n ediff-current-difference)
@@ -1575,6 +2091,73 @@ Requires ImageMagick installation"
   :commands (ocr-dev ocrtext-dev ocr-stage ocrtext-stage ocr-live ocrtext-live))
 
 ;;; * Misc Functions
+
+(defun random-cursor-movement ()
+  (interactive)
+  (push-mark)
+  (while
+      (apply (lambda (operation maxtimes)
+               (loop repeat (1+ (random maxtimes))
+                     always
+                     (let ((p (point)))
+                       (ignore-errors (apply operation nil))
+                       (sit-for (+ .1 (/ (log (abs (- p (point)))) 10))))))
+             (case (random 12)
+               (0 '(previous-line 10))
+               (1 '(next-line 10 ))
+               (2 '(forward-char 10 ))
+               (3 '(backward-char 10 ))
+               (4 '(forward-word 10 ))
+               (5 '(backward-word 10 ))
+               (6 '(beginning-of-line 1))
+               (7 '(end-of-line 1))
+               (8 '(scroll-up-command 4))
+               (9 '(scroll-down-command 4))
+               (10 '(forward-sexp 1))
+               (11 '(backward-sexp 1))
+               (t '(ignore 1))
+               ))
+    ))
+
+(defun mandelbrot ()
+  (interactive)
+  (pop-to-buffer (get-buffer-create "*mandelbrot*"))
+  (when (not (boundp 'mandelbrot-xoffset)) (setq mandelbrot-xoffset 0))
+  (when (not (boundp 'mandelbrot-yoffset)) (setq mandelbrot-yoffset 0))
+  (when (not (boundp 'mandelbrot-zoom)) (setq mandelbrot-zoom 1.5))
+  (let ((w 400) (h 300) (d 64))
+    (fundamental-mode) (erase-buffer)
+    (set-buffer-multibyte nil)
+    (insert (format "P6\n%d %d\n255\n" w h))
+    (dotimes (y h)
+      (dotimes (x w)
+        (let* ((cx (+ mandelbrot-xoffset (* mandelbrot-zoom (/ (- x (/ w 1.45)) w 0.45))))
+               (cy (+ mandelbrot-yoffset (* mandelbrot-zoom (/ (- y (/ h 2.0)) h 0.5))))
+               (zr 0) (zi 0)
+               (v (dotimes (i d d)
+                    (if (> (+ (* zr zr) (* zi zi)) 4) (return i)
+                      (psetq zr (+ (* zr zr) (- (* zi zi)) cx)
+                             zi (+ (* (* zr zi) 2) cy))))))
+          (insert-char (floor (* 256 (/ v 1.0 d))) 3))))
+    (image-mode)
+    (use-local-map (copy-keymap image-mode-map))
+    (defmacro mandelbrot-key (key &rest actions)
+      `(local-set-key (kbd ,key)
+                      (lambda ()
+                        (interactive)
+                        ,@actions 
+                        (mandelbrot))))
+    (mandelbrot-key "r"
+                    (setq mandelbrot-xoffset 0)
+                    (setq mandelbrot-yoffset 0)
+                    (setq mandelbrot-zoom 1.5))
+    (mandelbrot-key "<left>" (setq mandelbrot-xoffset (+ mandelbrot-xoffset (* -.5 mandelbrot-zoom))))
+    (mandelbrot-key "<right>" (setq mandelbrot-xoffset (+ mandelbrot-xoffset (* .5 mandelbrot-zoom))))
+    (mandelbrot-key "<up>" (setq mandelbrot-yoffset (+ mandelbrot-yoffset (* -.5 mandelbrot-zoom))))
+    (mandelbrot-key "<down>" (setq mandelbrot-yoffset (+ mandelbrot-yoffset (* .5 mandelbrot-zoom))))
+    (mandelbrot-key "=" (setq mandelbrot-zoom (* mandelbrot-zoom .666)))
+    ))
+
 (defun random-sort-lines (beg end)
   "Sort lines in region randomly."
   (interactive "r")
@@ -1652,192 +2235,24 @@ is a lot more readable without the ^M's getting in the way."
 
 (advice-add 'comment-dwim :around #'killdash9/comment-dwim)
 
+(defun open-in-desktop ()
+  "Show current file in desktop (OS's file manager)."
+  (interactive)
+  (cond
+   ((string-equal system-type "windows-nt")
+    (w32-shell-execute "explore" (replace-regexp-in-string "/" "\\" default-directory t t)))
+   ((string-equal system-type "darwin") (shell-command "open ."))
+   ((string-equal system-type "gnu/linux")
+    (let ((process-connection-type nil)) (start-process "" nil "xdg-open" "."))
+    ;; (shell-command "xdg-open .") ;; 2013-02-10 this sometimes froze emacs till the folder is closed. ⁖ with nautilus
+    ) ))
+
+(defun range (min max)
+  (when (<= min max)
+    (cons min (range (+ min 1) max))))
+
 ;;; * Customization Variables
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(ack-and-a-half-executable "/opt/local/bin/ack-5.12")
- '(ahg-hg-command "/usr/local/bin/hg")
- '(ahg-summary-remote t)
- '(ansi-color-names-vector
-   ["#212526" "#ff4b4b" "#b4fa70" "#fce94f" "#729fcf" "#ad7fa8" "#8cc4ff" "#eeeeec"])
- '(atari-click-mode t)
- '(backup-by-copying-when-linked t)
- '(blink-cursor-mode t)
- '(buffer-face-mode-face (quote fixed-pitch))
- '(c-default-style
-   (quote
-    ((java-mode . "strousttrup")
-     (awk-mode . "awk")
-     (other . "stroustrup"))))
- '(calendar-latitude 40.2444)
- '(calendar-longitude -111.6608)
- '(comint-completion-addsuffix t)
- '(comint-completion-autolist t)
- '(comint-input-ignoredups t)
- '(comint-move-point-for-output t)
- '(comint-scroll-show-maximum-output t)
- '(comint-scroll-to-bottom-on-input t)
- '(cursor-in-non-selected-windows t)
- '(custom-safe-themes
-   (quote
-    ("a27c00821ccfd5a78b01e4f35dc056706dd9ede09a8b90c6955ae6a390eb1c1e" "0c3f22acd840eaa072cb23d6c786fa00a69697593ac9d931087b87e072262a61" "6788ec244e2cb7e03ec12264888f3ad956f6373e92c0f964288fb984dd628977" "815956f68af145fca4fca99354b218112ce634225705931c0a8f6cc7c2c821ab" "f4405fefab9d7828fd3e0876a21af95cfae7d03146fb95b6480118325b43e22c" "05861f7ac0f5445539cb45ec2c1c47b4434d2e3c98f1de329d590242a70694ab" "efb876a2714f5a68f60f9db2b55852f039de39043efe788086d391d054908d31" "09a8deda49fcf29d19225b9f04000e8df5bf63907471b8f7a22019b76ccf18fd" "ee0ab0c0064d76662eef47614a587b3316a81418e54090a41b8d9704a7fcfee1" default)))
- '(custom-theme-load-path (quote (custom-theme-directory t "~/.emacs.d/themes")))
- '(debug-on-error nil)
- '(dired-dwim-target t)
- '(dired-listing-switches "-alh")
- '(dirtrack-list (quote ("^\\(.*/.*\\)\\$ " 1)))
- '(display-time-day-and-date t)
- '(ediff-window-setup-function (quote ediff-setup-windows-plain))
- '(epa-file-cache-passphrase-for-symmetric-encryption t)
- '(erc-hide-list (quote ("JOIN" "QUIT")))
- '(explicit-bash-args (quote ("--noediting" "-i" "-l")))
- '(fancy-splash-image "splash.png")
- '(flycheck-php-phpmd-executable
-   "/Users/rblack/code/hg/news-dev-frontend/vendor/phpmd/phpmd/src/bin/phpmd")
- '(flycheck-phpmd-rulesets (quote ("cleancode" "design" "unusedcode")))
- '(gnutls-trustfiles
-   (quote
-    ("/etc/ssl/certs/ca-certificates.crt" "/etc/pki/tls/certs/ca-bundle.crt" "/etc/ssl/ca-bundle.pem" "/usr/ssl/certs/ca-bundle.crt" "/opt/local/share/curl/curl-ca-bundle.crt")))
- '(grep-highlight-matches t)
- '(heartbeat-cursor-mode nil)
- '(helm-M-x-fuzzy-match t)
- '(helm-recentf-fuzzy-match t)
- '(httpd-port 8765)
- '(ido-use-filename-at-point (quote guess))
- '(imenu-auto-rescan t)
- '(jabber-alert-message-hooks
-   (quote
-    (jabber-message-wave jabber-message-echo jabber-message-scroll)))
- '(jabber-alert-message-wave
-   "/Applications/Messages.app/Contents/Resources/Received Message.aiff")
- '(jabber-alert-muc-hooks (quote (jabber-muc-wave jabber-muc-echo jabber-muc-scroll)))
- '(jabber-alert-muc-wave
-   "/Applications/Messages.app/Contents/Resources/Received Message.aiff")
- '(jabber-alert-presence-hooks nil)
- '(jabber-auto-reconnect t)
- '(jabber-history-enabled t)
- '(jabber-reconnect-delay 1800)
- '(jabber-use-global-history nil)
- '(litable-result-format "=> %s ")
- '(load-prefer-newer t)
- '(mazemax-char "C")
- '(mew-imap-ssl t)
- '(mode-require-final-newline nil)
- '(multi-term-program-switches "-l")
- '(org-agenda-files (quote ("~/org/life.org" "~/org/flagged.org")))
- '(org-agenda-include-diary t)
- '(org-agenda-prefix-format
-   (quote
-    ((agenda . " %i %-12:c%?-12t% s%-10 e")
-     (timeline . "  % s")
-     (todo . " %i %-12:c")
-     (tags . " %i %-12:c")
-     (search . " %i %-12:c"))))
- '(org-agenda-restore-windows-after-quit nil)
- '(org-agenda-skip-scheduled-if-done t)
- '(org-agenda-start-on-weekday nil)
- '(org-agenda-window-setup (quote current-window))
- '(org-blank-before-new-entry (quote ((heading) (plain-list-item))))
- '(org-checkbox-hierarchical-statistics nil)
- '(org-completion-use-ido t)
- '(org-emphasis-alist
-   (quote
-    (("*" font-lock-warning-face)
-     ("/" italic)
-     ("_" underline)
-     ("=" org-verbatim verbatim)
-     ("~" org-code verbatim)
-     ("+"
-      (:strike-through t)))))
- '(org-enforce-todo-dependencies t)
- '(org-export-with-sub-superscripts nil)
- '(org-hide-emphasis-markers t)
- '(org-html-postamble nil)
- '(org-imenu-depth 3)
- '(org-log-done (quote time))
- '(org-modules
-   (quote
-    (org-bbdb org-bibtex org-docview org-gnus org-info org-irc org-mhe org-rmail org-w3m org-mac-link)))
- '(org-outline-path-complete-in-steps nil)
- '(org-refile-targets (quote (("~/org/life.org" :level . 2))))
- '(org-refile-use-outline-path t)
- '(org-return-follows-link t)
- '(org-src-fontify-natively t)
- '(org-startup-indented t)
- '(org-support-shift-select t)
- '(package-pinned-packages (quote ((csv-mode . "\"gnu\""))))
- '(paradox-automatically-star t)
- '(paradox-github-token t)
- '(php-manual-path "/Users/rblack/Downloads/php-chunked-xhtml")
- '(projectile-enable-caching t)
- '(projectile-ignored-projects (quote ("~/.emacs.d/")))
- '(safe-local-variable-values
-   (quote
-    ((org-confirm-babel-evaluate)
-     (encoding . utf-8)
-     (org-babel-no-eval-on-ctrl-c-ctrl-c . t)
-     (org-export-with-toc . t)
-     (org-export-with-section-numbers)
-     (org-export-with-toc))))
- '(save-place nil nil (saveplace))
- '(send-mail-function (quote mailclient-send-it))
- '(shell-switcher-new-shell-function (quote shell-switcher-make-shell))
- '(show-paren-mode t)
- '(slime-volleyball-enable-sound nil)
- '(soap-debug t)
- '(swiper-completion-method (quote helm))
- '(term-bind-key-alist
-   (quote
-    (("C-c C-c" . term-interrupt-subjob)
-     ("C-s" . isearch-forward)
-     ("C-r" . isearch-backward)
-     ("C-m" . term-send-raw)
-     ("M-<right>" . term-send-forward-word)
-     ("M-f" . term-send-forward-word)
-     ("M-<left>" . term-send-backward-word)
-     ("M-b" . term-send-backward-word)
-     ("M-p" . term-send-up)
-     ("M-n" . term-send-down)
-     ("<C-kp-delete>" . term-send-forward-kill-word)
-     ("<C-backspace>" . term-send-backward-kill-word)
-     ("M-r" . term-send-reverse-search-history)
-     ("M-," . term-send-input)
-     ("M-." . comint-dynamic-complete)
-     ("s-<left>" . term-send-home)
-     ("s-<right>" . term-send-end))))
- '(term-eol-on-send nil)
- '(term-suppress-hard-newline nil)
- '(term-unbind-key-list
-   (quote
-    ("C-x" "C-c" "C-y" "C-h" "C-f" "C-b" "M-:" "C-x C-k" "M-o" "M-x")))
- '(tls-program
-   (quote
-    ("openssl s_client -connect %h:%p -no_ssl2 -ign_eof" "gnutls-cli --insecure -p %p %h" "gnutls-cli --insecure -p %p %h --protocols ssl3")))
- '(tool-bar-mode nil)
- '(transient-mark-mode nil)
- '(undo-tree-mode-lighter "")
- '(uniquify-buffer-name-style (quote post-forward-angle-brackets) nil (uniquify))
- '(web-mode-code-indent-offset 4)
- '(whitespace-line-column 10000)
- '(yas-also-auto-indent-first-line t))
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(jabber-roster-user-online ((t (:foreground "green3" :slant normal :weight bold))))
- '(litable-result-face ((t (:inherit font-lock-preprocessor-face))))
- '(mazemax-face ((t (:background "gray42" :foreground "gray42" :inverse-video nil))))
- '(mazemax-free-face ((t (:background "gray0"))))
- '(whitespace-empty ((t nil)))
- '(whitespace-indentation ((t nil)))
- '(whitespace-line ((t nil)))
- '(whitespace-space-before-tab ((t nil)))
- '(whitespace-tab ((t (:foreground "darkgray"))))
- '(whitespace-trailing ((t nil))))
+(load custom-file)
 
 ;;; * Secrets file
 (load "~/.emacs-secrets.el")

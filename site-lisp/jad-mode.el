@@ -66,7 +66,7 @@
   "The name of the decompiler if it's on your path, otherwise
 a full qualified path to it.")
 
-(defvar jdc-parameter  " -space -t4 -o "
+(defvar jdc-parameter  " -space -t4 -o -lnc "
   "Extra parameter which should be added to the call of the decompiler.")
 
 (defvar jdc-extension  "jad"
