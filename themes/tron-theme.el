@@ -59,6 +59,7 @@
  ;;; org
  '(org-table (( t (:inherit 'font-lock-builtin-face))))
  '(org-level-4 (( t (:inherit 'font-lock-string-face))))
+ '(which-func (( t (:foreground "#ec9346" :background "grey30"))))
 )
 
 (provide-theme 'tron)

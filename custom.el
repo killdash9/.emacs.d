@@ -29,7 +29,7 @@
  '(cursor-in-non-selected-windows t)
  '(custom-safe-themes
    (quote
-    ("01ccbb2bbd660e98e3977a528bcf905f16cc86d4d881a4df03d3f98a3f611fa1" "46a8646bfe191df614aae7b9209bb3dc72a4259c0f5cacd7b61a03a65d470783" "6aa7714697f9e9f495c78fac77e40cef181e453916d1b19e691fa240116f9ec9" "7bc5c5e58a321ff198d92db4bb377b2e5928f56cc776efca69d45660754c2a3e" "a80f6a85d84170b67749782db7e1aa7c0339caf6d645879ba9924536f87db762" "11b82f1b39397638b5c26f3a6c038992a870b614a1d59455871aa9d2ecb47939" "a27c00821ccfd5a78b01e4f35dc056706dd9ede09a8b90c6955ae6a390eb1c1e" "0c3f22acd840eaa072cb23d6c786fa00a69697593ac9d931087b87e072262a61" "6788ec244e2cb7e03ec12264888f3ad956f6373e92c0f964288fb984dd628977" "815956f68af145fca4fca99354b218112ce634225705931c0a8f6cc7c2c821ab" "f4405fefab9d7828fd3e0876a21af95cfae7d03146fb95b6480118325b43e22c" "05861f7ac0f5445539cb45ec2c1c47b4434d2e3c98f1de329d590242a70694ab" "efb876a2714f5a68f60f9db2b55852f039de39043efe788086d391d054908d31" "09a8deda49fcf29d19225b9f04000e8df5bf63907471b8f7a22019b76ccf18fd" "ee0ab0c0064d76662eef47614a587b3316a81418e54090a41b8d9704a7fcfee1" default)))
+    ("b987df2743acef44d0ea46d555ff4a5dcf522e0b7791ea0fca62315f034b04b8" "01ccbb2bbd660e98e3977a528bcf905f16cc86d4d881a4df03d3f98a3f611fa1" "46a8646bfe191df614aae7b9209bb3dc72a4259c0f5cacd7b61a03a65d470783" "6aa7714697f9e9f495c78fac77e40cef181e453916d1b19e691fa240116f9ec9" "7bc5c5e58a321ff198d92db4bb377b2e5928f56cc776efca69d45660754c2a3e" "a80f6a85d84170b67749782db7e1aa7c0339caf6d645879ba9924536f87db762" "11b82f1b39397638b5c26f3a6c038992a870b614a1d59455871aa9d2ecb47939" "a27c00821ccfd5a78b01e4f35dc056706dd9ede09a8b90c6955ae6a390eb1c1e" "0c3f22acd840eaa072cb23d6c786fa00a69697593ac9d931087b87e072262a61" "6788ec244e2cb7e03ec12264888f3ad956f6373e92c0f964288fb984dd628977" "815956f68af145fca4fca99354b218112ce634225705931c0a8f6cc7c2c821ab" "f4405fefab9d7828fd3e0876a21af95cfae7d03146fb95b6480118325b43e22c" "05861f7ac0f5445539cb45ec2c1c47b4434d2e3c98f1de329d590242a70694ab" "efb876a2714f5a68f60f9db2b55852f039de39043efe788086d391d054908d31" "09a8deda49fcf29d19225b9f04000e8df5bf63907471b8f7a22019b76ccf18fd" "ee0ab0c0064d76662eef47614a587b3316a81418e54090a41b8d9704a7fcfee1" default)))
  '(custom-theme-load-path (quote (custom-theme-directory t "~/.emacs.d/themes")))
  '(debug-on-error nil)
  '(dired-dwim-target t)
@@ -71,12 +71,15 @@
     (jabber-message-wave jabber-message-echo jabber-message-scroll jabber-send-text send-text-message-hook)))
  '(jabber-alert-message-wave
    "/Applications/Messages.app/Contents/Resources/Received Message.aiff")
- '(jabber-alert-muc-hooks (quote (jabber-muc-wave jabber-muc-echo jabber-muc-scroll send-text-muc-hook)))
+ '(jabber-alert-muc-hooks
+   (quote
+    (jabber-muc-wave jabber-muc-echo jabber-muc-scroll send-text-muc-hook)))
  '(jabber-alert-muc-wave
    "/Applications/Messages.app/Contents/Resources/Received Message.aiff")
  '(jabber-alert-presence-hooks nil)
  '(jabber-auto-reconnect t)
  '(jabber-history-enabled t)
+ '(jabber-history-muc-enabled t)
  '(jabber-reconnect-delay 1800)
  '(jabber-use-global-history nil)
  '(large-file-warning-threshold 100000000)
@@ -84,6 +87,7 @@
  '(litable-result-format "=> %s ")
  '(load-prefer-newer t)
  '(magit-file-buffer-arguments nil)
+ '(magit-log-auto-more t)
  '(magit-revision-show-gravatars nil)
  '(mazemax-char "C")
  '(mew-imap-ssl t)
@@ -190,6 +194,10 @@
  '(transient-mark-mode nil)
  '(undo-tree-mode-lighter "")
  '(uniquify-buffer-name-style (quote post-forward-angle-brackets) nil (uniquify))
+ '(visible-mark-faces (quote (visible-mark-face1 visible-mark-face2)))
+ '(visible-mark-forward-faces (quote (visible-mark-forward-face1)))
+ '(visible-mark-forward-max 1)
+ '(visible-mark-max 2)
  '(web-mode-code-indent-offset 4)
  '(whitespace-line-column 10000)
  '(yas-also-auto-indent-first-line t))
@@ -202,6 +210,7 @@
  '(litable-result-face ((t (:inherit font-lock-preprocessor-face))))
  '(mazemax-face ((t (:background "gray42" :foreground "gray42" :inverse-video nil))))
  '(mazemax-free-face ((t (:background "gray0"))))
+ '(visible-mark-active ((t (:inherit visible-mark-face1))))
  '(whitespace-empty ((t nil)))
  '(whitespace-indentation ((t nil)))
  '(whitespace-line ((t nil)))

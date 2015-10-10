@@ -282,6 +282,19 @@
       (let ((default-directory (if (file-exists-p default-directory) default-directory "/tmp/")))
         (shell-command-on-region (point-min) (point-max) (read-shell-command "Shell command on buffer: ") nil)))
 
+    ;; Out of the box, pressing C-SPC twice activates the mark.  This
+    ;; makes a third C-SPC activate the region that existed at the
+    ;; time of the first press.
+    (defun cycle-active-mark (orig-func &rest args)
+      (if (eq transient-mark-mode 'lambda)
+          (if  (= (point) (mark))
+              (progn (pop-mark) (activate-mark))
+            (let ((last-command nil))
+              (apply orig-func args)))
+        (apply orig-func args)))
+
+    (advice-add 'set-mark-command :around 'cycle-active-mark)
+
     ))
 
 
@@ -311,10 +324,10 @@
   :commands wgrep-setup)
 
 ;;; *** visible-mark
-(use-package visible-mark
+'(use-package visible-mark
   :defer 5
   :init
-  (defface visible-mark-active ;; put this before (require 'visible-mark)
+  '(defface visible-mark-active ;; put this before (require 'visible-mark)
     '((((type tty) (class mono)))
       (t (:background "magenta"))) "")
   :config (global-visible-mark-mode 1))
@@ -578,7 +591,7 @@
 
 ;;; *** magit
 (use-package magit
-;  :bind ("C-x g" . magit-status)
+  :bind ("C-x g" . magit-status)
   :init
   (setq magit-last-seen-setup-instructions "1.4.0")
   :config
@@ -586,7 +599,15 @@
     (setq magit-diff-refine-hunk 'all)
     '(defalias 'vc-print-log 'magit-log-buffer-file )
     (global-magit-file-buffer-mode 1)
-    ))
+
+    ;; fix for weird bug.  Sometimes, only when a file has been
+    ;; opened, file-accessible-directory-p returns true for a file.
+    ;; This fix ensures that it has to be a directory for it to return
+    ;; true.
+    (defun my-file-accessible-directory-p (orig-func &rest args)
+      (and (apply orig-func args)
+           (file-directory-p (car args))))
+    (advice-add 'file-accessible-directory-p :around 'my-file-accessible-directory-p)))
 
 ;;; *** restclient
 (use-package restclient
@@ -836,6 +857,7 @@ strings and will be called on completion."
       (let ((default-directory candidate))
         (helm-projectile-ag)))
     (defalias 'helm-find-files-grep 'helm-find-files-ag)
+    (key-chord-define-global "SS" 'helm-projectile-ag)
     '(defalias 'helm-ff-run-grep 'helm-projectile-ag)
     '(defalias 'helm-projectile-grep 'helm-projectile-ag)))
 
@@ -880,12 +902,23 @@ strings and will be called on completion."
       (interactive)
       (if (member major-mode isearch-modes)
           (call-interactively 'isearch-forward)
-        (call-interactively 'swiper)))
+        (call-interactively 'swiper-helm)))
     (defun swiper-or-isearch-backward ()
       (interactive)
       (if (member major-mode isearch-modes)
           (call-interactively 'isearch-backward)
-        (call-interactively 'swiper)))))
+        (call-interactively 'swiper-helm)))))
+
+;;; *** swiper
+(use-package swiper-helm
+  :ensure t
+  :config
+  (progn
+    (setq swiper-helm-display-function 'helm-default-display-buffer)
+    (require 'which-func)
+    (defun swiper-update-which-func (&rest args)
+      (which-func-update-1 (helm-persistent-action-display-window)))
+    (advice-add 'swiper--update-sel :after 'swiper-update-which-func )))
 
 
 ;;; *** cmds.c
@@ -1011,7 +1044,45 @@ strings and will be called on completion."
             (bind-key "M-r" 'helm-comint-input-ring shell-mode-map )
             (diminish 'helm-mode)
             (defalias 'man 'helm-man-woman)
-            (helm-autoresize-mode t)))
+            (helm-autoresize-mode t))
+
+  ;; helm-mini -- highlight @ words in buffer when they are selected
+  (defvar helm-highlight-@pattern-last-buf nil "The last buffer we searched through.")
+  (defvar helm-highlight-@pattern-last-regexp nil "The last pattern we searched for.")
+
+  (defun helm-highlight-@pattern (&rest args)
+    (if (not current-prefix-arg)
+        (lexical-let ((regexp (cl-loop with pattern = helm-pattern
+                                       for p in (split-string pattern)
+                                       when (string-match "\\`@\\(..+\\)" p)
+                                       return (match-string 1 p)))
+                      (buf (current-buffer)))
+          (when regexp
+            (progn
+              (when (not (and (eq helm-highlight-@pattern-last-buf buf)
+                              (equal helm-highlight-@pattern-last-regexp regexp)))
+                (beginning-of-buffer))
+              (let ((font-lock-mode nil))
+                (highlight-regexp regexp))
+              (setq helm-highlight-@pattern-last-buf buf
+                    helm-highlight-@pattern-last-regexp regexp)
+              (when (and (eq this-command 'helm-maybe-exit-minibuffer))
+                (re-search-backward regexp nil t))
+              (or (re-search-forward regexp nil t) (progn (beginning-of-buffer) (re-search-forward regexp nil t)))
+              (set-transient-map `(keymap) nil
+                                 (lambda () (with-current-buffer buf (unhighlight-regexp regexp)))))))))
+
+  (advice-add 'helm-switch-to-buffers :after 'helm-highlight-@pattern)
+  (advice-add 'helm-buffers-list-persistent-action :after 'helm-highlight-@pattern)
+
+  (setq helm-locate-command
+        (cl-case system-type
+          (gnu/linux "locate %s -e -r %s")
+          (berkeley-unix "locate %s %s")
+          (windows-nt "es %s %s")
+          (darwin "mdfind -name %s %s") 
+          (t "locate %s %s")))
+  )
 
 ;;; ** Major Modes
 ;;; *** python-mode
@@ -1033,10 +1104,13 @@ strings and will be called on completion."
       :ensure t
       :config
       (progn
-        (add-hook 'js2-mode-hook 'ac-js2-mode)
+        ;(add-hook 'js2-mode-hook 'ac-js2-mode) commented out to try tern
         (setq ac-js2-evaluate-calls t) ;; installation instructions from ac-js2, for auto-complete in browser)
         (require 'jquery-doc)
         (add-hook 'js2-mode-hook 'jquery-doc-setup)
+        (defun js2-short-mode-name ()
+          (setq mode-name "JS"))
+        (add-hook 'js2-mode-hook 'js2-short-mode-name)
         ))
 
     (use-package js2-refactor
@@ -1053,7 +1127,8 @@ strings and will be called on completion."
 (use-package json-mode
   :ensure t
   :mode (("\\.json\\'" . json-mode)
-         ("\\.har\\'" . json-mode)))
+         ("\\.har\\'" . json-mode)
+         ("\\.tern-project\\'" . json-mode)))
 
 ;;; *** jquery-doc
 (use-package jquery-doc
@@ -1679,6 +1754,7 @@ strings and will be called on completion."
   (setq scroll-preserve-screen-position t)
   (bind-key "C-S-v" 'scroll-up-line)
   (bind-key "M-V" 'scroll-down-line)
+  (bind-key "C-=" 'enlarge-window)
 
   ;; from http://whattheemacsd.com/buffer-defuns.el-03.html
   (defun toggle-window-split ()
@@ -2088,7 +2164,7 @@ Requires ImageMagick installation"
 
 ;;; *** mogile-edit
 (use-package mogile-edit
-  :commands (ocr-dev ocrtext-dev ocr-stage ocrtext-stage ocr-live ocrtext-live))
+  :commands (ocr-both-dev ocr-both-stage ocr-both-live))
 
 ;;; * Misc Functions
 
@@ -2216,14 +2292,16 @@ is a lot more readable without the ^M's getting in the way."
     (setq mark-ring (nbutlast mark-ring))
     (goto-char (marker-position (car (last mark-ring))))))
 
+(defun set-mark-command-maybe-unpop (orig-func &rest args)
+  (let ((arg (car args)))
+    (if (and (consp arg) (> (prefix-numeric-value arg) 4))
+        (progn
+          (message "unpopping")
+          (unpop-to-mark-command)
+          (setq this-command 'unpop-to-mark-command))
+      (apply orig-func args))))
 
-(defadvice set-mark-command (around push-if-uu (arg) activate)
-  (if (and (consp arg) (> (prefix-numeric-value arg) 4))
-      (progn
-        (unpop-to-mark-command)
-        (setq this-command 'unpop-to-mark-command))
-    ad-do-it
-    ))
+(advice-add 'set-mark-command :around 'set-mark-command-maybe-unpop)
 
 (defun killdash9/comment-dwim (orig-func &rest args)
   (when (not (region-active-p))
