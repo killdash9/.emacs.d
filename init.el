@@ -150,17 +150,20 @@
 
 ;;; *** undo-tree
 (use-package undo-tree
+  :ensure t
   :bind (("s-z" . undo-tree-undo)
          ("s-Z" . undo-tree-redo))
   :init (global-undo-tree-mode))
 
 ;;; *** move-text
 (use-package move-text
+  :ensure t
   :bind (("M-<up>" . move-text-up)
          ("M-<down>" . move-text-down)))
 
 ;;; *** pretty-lambdada
 (use-package pretty-lambdada
+  :ensure t
   :defer 5
   :config (pretty-lambda-for-modes))
 
@@ -479,6 +482,7 @@
 
 ;;; *** shell-switcher
 (use-package shell-switcher
+  :ensure t
   :bind (("C-'" . shell-switcher-switch-buffer)
          ("C-x 4 '" . shell-switcher-switch-buffer-other-window)
          ("C-M-'" . shell-switcher-new-shell))
@@ -591,6 +595,7 @@
 
 ;;; *** magit
 (use-package magit
+  :ensure t
   :bind ("C-x g" . magit-status)
   :init
   (setq magit-last-seen-setup-instructions "1.4.0")
@@ -683,14 +688,6 @@
 (unless (and (fboundp 'play-sound-internal)
              (subrp (symbol-function 'play-sound-internal)))
   (use-package play-sound))
-;;; *** emms
-(use-package emms-player-mplayer
-  :config
-  (progn
-    (define-emms-simple-player afplay '(file)
-      (regexp-opt '(".mp3" ".m4a" ".aac"))
-      "afplay")
-    (setq emms-player-list `(,emms-player-afplay))))
 
 ;;; *** emacs-eclim
 (use-package eclim
@@ -821,6 +818,7 @@ strings and will be called on completion."
 ;;; *** projectile
 (setq helm-projectile-fuzzy-match t)
 (use-package projectile
+  :ensure t
   :commands projectile-global-mode
   :init (projectile-global-mode)
   :config (progn
@@ -829,6 +827,7 @@ strings and will be called on completion."
 
 ;;; *** helm-projectile
 (use-package helm-projectile
+  :ensure t
    :config (progn
              ;; (setq helm-projectile-fuzzy-match t) ;; this should be the default
              (helm-projectile-on)
@@ -1018,6 +1017,7 @@ strings and will be called on completion."
 ;;; *** syntax-subword-mode
 ;; better word navigation
 (use-package syntax-subword
+  :ensure t
   :config
   (progn
     (global-syntax-subword-mode 1)
@@ -1118,6 +1118,7 @@ strings and will be called on completion."
       :config (js2r-add-keybindings-with-prefix "C-j"))))
 
 (use-package tern-auto-complete
+  :ensure t
   :config
   (progn
     (tern-ac-setup)
@@ -1422,6 +1423,7 @@ strings and will be called on completion."
     (bind-key "C-h C-v" 'find-variable-at-point lisp-interaction-mode-map)
     
     (use-package paredit
+      :ensure t
       :config
       (progn
         (add-hook 'emacs-lisp-mode-hook 'paredit-mode)
@@ -2048,7 +2050,9 @@ applied."
     ))
 
 ;;; ** ox-reveal
-(use-package ox-reveal)
+(use-package ox-reveal
+  :ensure t)
+
 ;;; ** org-passwords
 (use-package org-passwords
   :bind ( "C-*" . org-passwords) ; this is the binding that gets invoked by the applescript.
@@ -2070,6 +2074,7 @@ applied."
 
 ;;; ** exec-path-from-shell
 (use-package exec-path-from-shell
+  :ensure t
   :init (exec-path-from-shell-initialize) ; set the right PATH variable
   )
 
@@ -2332,11 +2337,11 @@ is a lot more readable without the ^M's getting in the way."
 ;;; * Customization Variables
 (load custom-file)
 
-;;; * Secrets file
-(load "~/.emacs-secrets.el")
-
 ;;; * Load Theme
 (load-theme 'tron)
+
+;;; * Secrets file
+(and (file-exists-p "~/.emacs-secrets.el" ) (load "~/.emacs-secrets.el"))
 
 ;;; * Local Variables
 ;; Local Variables:
