@@ -90,6 +90,20 @@
 ;;; *** variable-pitch-modes
 (use-package variable-pitch-modes)
 
+;;; *** hi-lock
+(use-package hi-lock
+  :config
+  (progn
+    (defun hi-lock-set-pattern-around (orig-func &rest args)
+      (letf* (((symbol-function 'orig-make-overlay) (symbol-function 'make-overlay))
+              ((symbol-function 'make-overlay)
+               (lambda (&rest args)
+                 (message "here we are")
+                 (apply orig-make-overlay args))))
+        (apply orig-func args)))
+    (advice-remove 'hi-lock-set-pattern 'hi-lock-set-pattern-around)
+    '(advice-add 'hi-lock-set-pattern :around 'hi-lock-set-pattern-around)))
+
 ;;(eval-after-load "isearch" '(require 'isearch+))
 ;;; ** Games
 ;;; *** 2048-game
@@ -115,6 +129,10 @@
   :ensure t
   :commands xkcd)
 ;;; ** Editing
+;;; *** type-break-mode
+(use-package type-break-mode
+  :config ()
+  )
 ;;; *** hippie-expand
 (use-package hippie-expand
   ;;:bind ("M-s-÷" . hippie-expand)
@@ -157,7 +175,19 @@
 ;;; *** move-text
 (use-package move-text
   :bind (("M-<up>" . move-text-up)
-         ("M-<down>" . move-text-down)))
+         ("M-<down>" . move-text-down))
+  :config
+  (progn
+    (defun move-text-indent (&rest args)
+      (if (region-active-p)
+          (progn
+            (indent-region (region-beginning) (region-end))
+            ;; reactivate the mark
+            (activate-mark)
+            (setq deactivate-mark nil))
+        (indent-according-to-mode)))
+    (advice-add 'move-text-up :after 'move-text-indent)
+    (advice-add 'move-text-down :after 'move-text-indent)))
 
 ;;; *** pretty-lambdada
 (use-package pretty-lambdada
@@ -295,6 +325,34 @@
 
     (advice-add 'set-mark-command :around 'cycle-active-mark)
 
+
+    ;; Press C-u C-u C-SPC to unpop.  
+    (defun unpop-to-mark-command ()
+      "Unpop off mark ring. Does nothing if mark ring is empty."
+      (when mark-ring
+        (setq mark-ring (cons (copy-marker (mark-marker)) mark-ring))
+        (set-marker (mark-marker) (car (last mark-ring)) (current-buffer))
+
+        (setq mark-ring (nbutlast mark-ring))
+        (goto-char (marker-position (car (last mark-ring))))
+        (message "Mark unpopped")
+        (setq this-command 'unpop-to-mark-command)
+        ))
+
+    (defun set-mark-command-maybe-unpop (orig-func &rest args)
+      (let ((prefix (prefix-numeric-value (car args))))
+        (if (and (not (boundp 'set-mark-recurse)) (> prefix 4)) ;; unpopping
+            (unpop-to-mark-command)
+          (when (and (not (boundp 'set-mark-recurse)) (not (eq (point) (mark))) (= prefix 4)) ;;popping
+            ;; if we're not already on the mark, then push and pop to save place so we can unpop
+            (let ((set-mark-recurse t))
+              (let ((current-prefix-arg nil)) (call-interactively 'set-mark-command))
+              (let ((current-prefix-arg '(4))) (call-interactively 'set-mark-command))))
+          (apply orig-func args))))
+
+    (advice-add 'set-mark-command :around 'set-mark-command-maybe-unpop)
+
+
     ))
 
 
@@ -321,7 +379,16 @@
 
 ;;; *** wgrep
 (use-package wgrep
-  :commands wgrep-setup)
+  :config
+  (progn
+    ;; disabling grep's read only mode enters wgrep mode.  Mirrors dired.
+    (defun add-C-x-C-q-binding ()
+      (define-key wgrep-original-mode-map (kbd "C-x C-q") 'wgrep-change-to-wgrep-mode))
+    (add-hook 'wgrep-setup-hook 'add-C-x-C-q-binding)))
+
+;;; *** wgrep-ag
+(use-package wgrep-ag
+  :ensure t)
 
 ;;; *** visible-mark
 '(use-package visible-mark
@@ -396,30 +463,37 @@
 ;;; *** tramp
 (use-package tramp
   :config
-  (setq tramp-methods
-        ;; add quotes qround %u to support domain\user
-        (mapcar
-         (lambda (method)
-           (let ((method-name (car method)))
-             (cons method-name
-                   (mapcar
-                    (lambda (prop)
-                      (let ((propname (car prop))
-                            (propvallist (cdr prop)))
-                        (cons propname
-                              (mapcar
-                               (lambda (propval)
-                                 (if (and (eq 'tramp-login-args propname) (string-equal "scp" method-name))
-                                     (mapcar
-                                      (lambda (arggroup)
-                                        (mapcar
-                                         (lambda (arg)
-                                           (if (string-equal arg "%u") "'%u'" arg)) arggroup))
-                                      propval)
-                                   propval))
-                               propvallist))))
-                    (cdr method))
-                   ))) tramp-methods)))
+  (progn
+    (setq tramp-auto-save-directory "/tmp")
+    (setq tramp-methods
+          ;; add quotes qround %u to support domain\user
+          (mapcar
+           (lambda (method)
+             (let ((method-name (car method)))
+               (cons method-name
+                     (mapcar
+                      (lambda (prop)
+                        (let ((propname (car prop))
+                              (propvallist (cdr prop)))
+                          (cons propname
+                                (mapcar
+                                 (lambda (propval)
+                                   (if (and (eq 'tramp-login-args propname) (string-equal "scp" method-name))
+                                       (mapcar
+                                        (lambda (arggroup)
+                                          (mapcar
+                                           (lambda (arg)
+                                             (if (string-equal arg "%u") "'%u'" arg)) arggroup))
+                                        propval)
+                                     propval))
+                                 propvallist))))
+                      (cdr method))
+                     ))) tramp-methods))
+    ;; disable vc for tramp
+    (setq vc-ignore-dir-regexp
+          (format "\\(%s\\)\\|\\(%s\\)"
+                  vc-ignore-dir-regexp
+                  tramp-file-name-regexp))))
 ;;; *** multi-term
 (use-package multi-term
   :ensure t
@@ -505,19 +579,14 @@
                    :buffer "*helm projectile*"
                    :prompt (projectile-prepend-project-name "cd: "))
              )
-            ((and
-              (save-excursion
-                (beginning-of-line)
-                (backward-char 1)
-                (beginning-of-line)
-                (or
-                 (looking-at "mysql>")
-                 (looking-at "[^ ]*:[^ ]*>")))
-              (save-excursion
-                (backward-char)
-                (and (looking-at "=")
-                     (re-search-backward " \\([^ ][^ =]*\\)"))))
-             (insert (sql-key-read (match-string 1)) " "))
+            ((save-excursion
+               (beginning-of-line)
+               (backward-char 1)
+               (beginning-of-line)
+               (or
+                (looking-at "mysql>")
+                (looking-at "[^ ]*:[^ ]*>")))
+             (sql-magic-space))
             
             (t (insert " "))))
     (define-key shell-mode-map " " 'shell-active-space)
@@ -530,7 +599,6 @@
 
 ;;; *** cssh
 (use-package cssh
-  :ensure t
   :bind ("C-;" . shell-remote-open;cssh-term-remote-open
          )
   :config (progn
@@ -609,6 +677,12 @@
            (file-directory-p (car args))))
     (advice-add 'file-accessible-directory-p :around 'my-file-accessible-directory-p)))
 
+;;; *** magit-gh-pulls
+(use-package magit-gh-pulls
+  :ensure t
+  :config
+  (add-hook 'magit-mode-hook 'turn-on-magit-gh-pulls))
+
 ;;; *** restclient
 (use-package restclient
   :mode (("\\.rest$" . restclient-mode)))
@@ -676,7 +750,7 @@
     (bind-key "C-x C-j" 'dired-jump)
     (bind-key "C-x 4 C-j" 'dired-jump-other-window)
     (bind-key* "C-c C-j" jabber-global-keymap)
-    (jabber-connect-all)))
+    '(jabber-connect-all)))
 
 
 ;;; *** play-sound
@@ -692,8 +766,20 @@
       "afplay")
     (setq emms-player-list `(,emms-player-afplay))))
 
+;;; *** helm-gtags
+(use-package helm-gtags
+  :config
+  (progn
+    (define-key helm-gtags-mode-map (kbd "M-t") 'helm-gtags-find-tag)
+    (define-key helm-gtags-mode-map (kbd "M-r") 'helm-gtags-find-rtag)
+    (define-key helm-gtags-mode-map (kbd "M-s") 'helm-gtags-find-symbol)
+    (define-key helm-gtags-mode-map (kbd "M-g M-p") 'helm-gtags-parse-file)
+    (define-key helm-gtags-mode-map (kbd "C-c <") 'helm-gtags-previous-history)
+    (define-key helm-gtags-mode-map (kbd "C-c >") 'helm-gtags-next-history)
+    (define-key helm-gtags-mode-map (kbd "M-,") 'helm-gtags-pop-stack)))
+
 ;;; *** emacs-eclim
-(use-package eclim
+'(use-package eclim
   :ensure emacs-eclim
   :config
   (progn
@@ -808,6 +894,20 @@ strings and will be called on completion."
     (define-key eclim-mode-map (kbd "s-.") 'eclim-next-error))
   )
 
+;;; *** chrome helper functions
+(defun chrome-url ()
+  "Get current chrome url"
+  (do-applescript
+   (concat
+    "tell application \"Google Chrome\"\n"
+    " return URL of active tab of front window\n"
+    "end tell\n")))
+
+(defun chrome-host ()
+  "Get current chrome host"
+  (replace-regexp-in-string
+   "https?://\\([^/]+\\)/.*" "\\1" (chrome-url)))
+
 ;;; ** Getting Around (search, navigation)
 ;;; *** ace-jump-mode
 '(use-package ace-jump-mode
@@ -851,13 +951,15 @@ strings and will be called on completion."
   :config
   (progn
     (setq helm-ag-use-grep-ignore-list t)
-    (setq helm-ag-base-command "ag --nocolor --nogroup --ignore-case ")
+    ;; ag-truncate is used to tame ag results from minimized javascript files
+    (setq helm-ag-base-command "~/.emacs.d/ag-truncate.sh --nocolor --nogroup --smart-case --column")
     (defun helm-find-files-ag (candidate)
       "Default action to grep files from `helm-find-files'.  Replaces helm-find-files-grep."
       (let ((default-directory candidate))
         (helm-projectile-ag)))
     (defalias 'helm-find-files-grep 'helm-find-files-ag)
     (key-chord-define-global "SS" 'helm-projectile-ag)
+    (key-chord-define-global "FF" 'helm-projectile-find-file)
     '(defalias 'helm-ff-run-grep 'helm-projectile-ag)
     '(defalias 'helm-projectile-grep 'helm-projectile-ag)))
 
@@ -867,8 +969,8 @@ strings and will be called on completion."
   (progn
     (add-to-list 'grep-find-ignored-files "*.pdf")
     (add-to-list 'grep-find-ignored-files "pts.js")
-    (add-to-list 'grep-find-ignored-files "jquery-*")
     (add-to-list 'grep-find-ignored-files "*.log")
+    (add-to-list 'grep-find-ignored-files "*.min.js")
     (add-to-list 'grep-find-ignored-files "*.log.*")
     (add-to-list 'grep-find-ignored-files "#*#")
     (add-to-list 'grep-find-ignored-files "*.orig")
@@ -877,6 +979,17 @@ strings and will be called on completion."
     (add-to-list 'grep-find-ignored-directories "ci_system")
     (add-to-list 'grep-find-ignored-directories "bin5")
     (add-to-list 'grep-find-ignored-directories "bin")))
+
+;;; *** ag
+(use-package ag
+  :ensure t
+  :config
+  (progn
+    ;; integrate helm-ag into ag and wgrep-ag
+    ;; helm-ag has its own inline editing, which I don't like as well as helm-ag/wgrep-ag. 
+    (add-hook 'helm-ag-mode-hook 'ag-mode)
+    (defalias 'helm-ag-edit 'helm-ag--run-save-buffer )))
+
 ;;; *** smartscan
 (use-package smartscan
   :bind (("M-n" . smartscan-symbol-go-forward)
@@ -888,7 +1001,18 @@ strings and will be called on completion."
   )
 
 ;;; *** isearch+
-;(use-package isearch+) do we need this with swiper?
+                                        ;(use-package isearch+) do we need this with swiper?
+
+;;; *** replace.el
+(progn
+  (defun occur-save ()
+    (interactive)
+    (with-current-buffer (marker-buffer (get-text-property (point) 'occur-target))
+      (call-interactively 'save-buffer)))
+  (define-key occur-edit-mode-map (kbd "C-x C-s" ) 'occur-save)
+  ;; key bindings to mirror dired
+  (define-key occur-edit-mode-map (kbd "C-x C-q" ) 'occur-cease-edit)
+  (define-key occur-mode-map (kbd "C-x C-q") 'occur-edit-mode))
 
 ;;; *** swiper
 (use-package swiper
@@ -896,7 +1020,7 @@ strings and will be called on completion."
          ("C-r" . swiper-or-isearch-backward))
   :config
   (progn
-    (setq isearch-modes '(shell-mode term-mode Info-mode messages-buffer-mode))
+    (setq isearch-modes '(shell-mode term-mode Info-mode messages-buffer-mode pdf-view-mode))
     (setq ivy-display-style 'fancy)
     (defun swiper-or-isearch-forward ()
       (interactive)
@@ -1093,6 +1217,12 @@ strings and will be called on completion."
   (progn
     (setq py-jython-command "/usr/local/bin/jython")))
 
+;;; *** pdf-view
+(use-package pdf-tools
+  :ensure t
+  :config (pdf-tools-install)
+  )
+
 ;;; *** js2-mode
 (use-package js2-mode
   :ensure t
@@ -1115,7 +1245,10 @@ strings and will be called on completion."
 
     (use-package js2-refactor
       :ensure t
-      :config (js2r-add-keybindings-with-prefix "C-j"))))
+      :config (progn
+                (js2r-add-keybindings-with-prefix "C-j")
+                (add-hook 'js2-mode-hook 'js2-refactor-mode)
+                (define-key js2-mode-map (kbd "C-k") 'js2r-kill)))))
 
 (use-package tern-auto-complete
   :config
@@ -1171,6 +1304,8 @@ strings and will be called on completion."
   (progn
     
     (define-key php-mode-map ";" 'maio/electric-semicolon)
+    (define-key php-mode-map (kbd "M-r") 'sp-raise-sexp)
+    (define-key php-mode-map "M" nil)
     (add-hook 'php-mode-hook 'smartparens-mode)
     (setq php-mode-coding-style 'symfony2)
     (bind-key [(control .)] nil php-mode-map)
@@ -1380,6 +1515,18 @@ strings and will be called on completion."
                  (let ((count (count-if (lambda (e) (equal word e)) collected-names)))
                    (if (> count 1) (concat "<" (number-to-string count) ">")) ))))))) ())
 
+;;; *** thread-dump
+(use-package thread-dump
+  :ensure t
+  :config
+  (progn
+
+    (defun thread-dump-command ()
+      "Inserts a command to get the thread dump of the currently-running java process.  Use this in a shell."
+      (interactive)
+      (insert "file=`sudo ps -ef | grep java|grep -o 'logging.dir=[^ ]*'|sed 's,logging.dir=,,'`/catalina.out;sudo killall -s SIGQUIT java;sleep 1;tac -s 'Full thread dump ' -r $file |awk '/^Heap$/{l=10} {l--;print} l==0 {exit} ' > /tmp/threaddump"))
+
+    ))
 ;;; *** vtl
 (use-package vtl
   :mode (".*/email.*\\.txt$" . vtl-mode))       ;opens our email templates as vtl
@@ -1557,6 +1704,7 @@ strings and will be called on completion."
 
 ;;; *** files.el
 (progn                                  ;files.el
+
   
   ;; Settings for backups
   (setq make-backup-files t
@@ -1566,7 +1714,7 @@ strings and will be called on completion."
         kept-old-versions 0
         backup-by-copying t
         version-control t
-        backup-dir  "~/.saves"
+        backup-dir  "/Users/rblack/.saves"
         backup-directory-alist `(("." . ,backup-dir))
         tramp-backup-directory-alist backup-directory-alist)
 
@@ -1699,6 +1847,17 @@ strings and will be called on completion."
     (add-hook 'dired-mode-hook
               (lambda()
                 (define-key dired-mode-map (kbd "P")   'dired-view-corresponding-pdf)))
+
+    (defun dired-make-shell-here ()
+      (interactive)
+      (shell (let ((host-name
+                       (if (file-remote-p default-directory)
+                           (tramp-file-name-host
+                            (tramp-dissect-file-name default-directory))
+                         (system-name))))
+               (concat "*shell " host-name "*"))))
+    
+    (define-key dired-mode-map (kbd "C-!") 'dired-make-shell-here) ;does this need to be in dired-mode-hook like above?
     
     (add-hook 'dired-load-hook
               (lambda ()
@@ -1840,6 +1999,7 @@ strings and will be called on completion."
   :config
   (progn
 
+    (setq org-ellipsis "…")
     (key-chord-define org-mode-map "**" 'org-ctrl-c-star)
     (add-hook 'org-mode-hook
               (lambda ()
@@ -1997,35 +2157,42 @@ applied."
 :CREATED: %U
 :END:")
             ("l" "Work TODO with link" entry (file+headline "~/org/life.org" "Work")
-             "* TODO %?\n  %i\n  %a
+             "* TODO %?
 :PROPERTIES:
 :CREATED: %U
-:END:")
+:END:
+%i\n  %a")
             ("b" "Buy" entry (file+headline "~/org/life.org" "Shopping")
-             "* TODO %? %i
+             "* TODO %?
 :PROPERTIES:
 :CREATED: %U
-:END:")
+:END:
+%i")
             ("r" "Rental Business" entry (file+olp "~/org/life.org" "Rental Business" "Tasks")
-             "* TODO %? %i
+             "* TODO %?
 :PROPERTIES:
 :CREATED: %U
-:END:")
+:END:
+%i")
             ("h" "Home TODO" entry (file+olp "~/org/life.org" "Home" "Tasks")
-             "* TODO %?\n %i
+             "* TODO %?
 :PROPERTIES:
 :CREATED: %U
-:END:")
+:END:
+%i
+")
             ("s" "SAR TODO" entry (file+olp "~/org/life.org" "SAR" "Tasks")
-             "* TODO %?\n  %i
+             "* TODO %?
 :PROPERTIES:
 :CREATED: %U
-:END:")
+:END:
+%i")
             ("t" "General TODO" entry (file+headline "~/org/life.org" "Tasks")
-             "* TODO %?\n  %i
+             "* TODO %?
 :PROPERTIES:
 :CREATED: %U
-:END:")
+:END:
+%i")
             ("p" "Password" entry (file org-passwords-file)
              "* %^{Title|%(org-passwords-chrome-title)}
 :PROPERTIES:
@@ -2164,36 +2331,53 @@ Requires ImageMagick installation"
 
 ;;; *** mogile-edit
 (use-package mogile-edit
-  :commands (ocr-both-dev ocr-both-stage ocr-both-live))
+  :commands (ocr))
 
 ;;; * Misc Functions
 
+(defun get-random-element (list)
+  "Returns a random element of LIST."
+  (if (not (and (list) (listp list)))
+      (nth (random (1- (1+ (length list)))) list)
+    (error "Argument to get-random-element not a list or the list is empty")))
+
+(defun switch-to-random-buffer ()
+  (switch-to-buffer
+   (get-random-element
+    (remove-if-not
+     (lambda (b)
+       (with-current-buffer b
+         buffer-file-name)) (buffer-list))) t))
+
 (defun random-cursor-movement ()
   (interactive)
-  (push-mark)
-  (while
-      (apply (lambda (operation maxtimes)
-               (loop repeat (1+ (random maxtimes))
-                     always
-                     (let ((p (point)))
-                       (ignore-errors (apply operation nil))
-                       (sit-for (+ .1 (/ (log (abs (- p (point)))) 10))))))
-             (case (random 12)
-               (0 '(previous-line 10))
-               (1 '(next-line 10 ))
-               (2 '(forward-char 10 ))
-               (3 '(backward-char 10 ))
-               (4 '(forward-word 10 ))
-               (5 '(backward-word 10 ))
-               (6 '(beginning-of-line 1))
-               (7 '(end-of-line 1))
-               (8 '(scroll-up-command 4))
-               (9 '(scroll-down-command 4))
-               (10 '(forward-sexp 1))
-               (11 '(backward-sexp 1))
-               (t '(ignore 1))
-               ))
-    ))
+  (save-excursion
+    (save-selected-window
+      (push-mark)
+      (while
+          (apply (lambda (operation maxtimes)
+                   (loop repeat (1+ (random maxtimes))
+                         always
+                         (let ((p (point)))
+                           (ignore-errors (apply operation nil))
+                           (sit-for (+ .1 (/ (log (abs (- p (point)))) 10))))))
+                 (case (random 13)
+                   (0 '(previous-line 10))
+                   (1 '(next-line 10 ))
+                   (2 '(forward-char 10 ))
+                   (3 '(backward-char 10 ))
+                   (4 '(forward-word 10 ))
+                   (5 '(backward-word 10 ))
+                   (6 '(beginning-of-line 1))
+                   (7 '(end-of-line 1))
+                   (8 '(scroll-up-command 4))
+                   (9 '(scroll-down-command 4))
+                   (10 '(forward-sexp 1))
+                   (11 '(backward-sexp 1))
+                   (12 '(switch-to-random-buffer 1))
+                   (t '(ignore 1))
+                   ))
+        ))))
 
 (defun mandelbrot ()
   (interactive)
@@ -2282,27 +2466,6 @@ is a lot more readable without the ^M's getting in the way."
   (interactive "r")
   (func-region start end #'url-unhex-string))
 
-(defun unpop-to-mark-command ()
-  "Unpop off mark ring. Does nothing if mark ring is empty."
-  (interactive)
-  (when mark-ring
-    (setq mark-ring (cons (copy-marker (mark-marker)) mark-ring))
-    (set-marker (mark-marker) (car (last mark-ring)) (current-buffer))
-
-    (setq mark-ring (nbutlast mark-ring))
-    (goto-char (marker-position (car (last mark-ring))))))
-
-(defun set-mark-command-maybe-unpop (orig-func &rest args)
-  (let ((arg (car args)))
-    (if (and (consp arg) (> (prefix-numeric-value arg) 4))
-        (progn
-          (message "unpopping")
-          (unpop-to-mark-command)
-          (setq this-command 'unpop-to-mark-command))
-      (apply orig-func args))))
-
-(advice-add 'set-mark-command :around 'set-mark-command-maybe-unpop)
-
 (defun killdash9/comment-dwim (orig-func &rest args)
   (when (not (region-active-p))
     (beginning-of-line)
@@ -2328,6 +2491,61 @@ is a lot more readable without the ^M's getting in the way."
 (defun range (min max)
   (when (<= min max)
     (cons min (range (+ min 1) max))))
+
+(defun save-and-refresh-chrome()
+  (interactive)
+  (when buffer-file-name
+    (save-buffer))
+  (do-applescript "tell application \"Google Chrome\" to reload front window's active tab"))
+
+(key-chord-define-global "RR" 'save-and-refresh-chrome)
+
+(require 'cl-lib)
+
+(defvar punctuation-marks '(","
+                            "."
+                            "'"
+                            "&"
+                            "\"")
+  "List of Punctuation Marks that you want to count.")
+
+(defun count-raw-word-list (raw-word-list)
+  (cl-loop with result = nil
+           for elt in raw-word-list
+           do (cl-incf (cdr (or (assoc elt result)
+                                (first (push (cons elt 0) result)))))
+           finally return (sort result
+                                (lambda (a b) (string< (car a) (car b))))))
+
+(defun word-frequency-histogram ()
+  (interactive)
+  (let* ((words (split-string
+                 (downcase (buffer-string))
+                 (format "[ %s\f\t\n\r\v]+"
+                         (mapconcat #'identity punctuation-marks ""))
+                 t))
+         (punctuation-marks (cl-remove-if-not
+                             (lambda (elt) (member elt punctuation-marks))
+                             (split-string (buffer-string) "" t )))
+         (raw-word-list (append punctuation-marks words))
+         (word-list (count-raw-word-list raw-word-list)))
+    (with-current-buffer (get-buffer-create "*word-statistics*")
+      (erase-buffer)
+      (insert "| word | occurences |
+               |-----------+------------|\n")
+
+      (dolist (elt word-list)
+        (insert (format "| '%s' | %d |\n" (car elt) (cdr elt))))
+
+      (org-mode)
+      (indent-region (point-min) (point-max))
+      (beginning-of-buffer)
+      (next-line 2)
+      (org-cycle)
+      (org-cycle)
+      (org-table-sort-lines nil ?N)))
+  (pop-to-buffer "*word-statistics*"))
+
 
 ;;; * Customization Variables
 (load custom-file)

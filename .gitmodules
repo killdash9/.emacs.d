@@ -10,3 +10,6 @@
 [submodule "site-lisp/tron.el"]
 	path = site-lisp/tron.el
 	url = https://github.com/killdash9/tron.el.git
+[submodule "site-lisp/buffer-flip.el"]
+	path = site-lisp/buffer-flip.el
+	url = https://github.com/killdash9/buffer-flip.el.git

@@ -13,9 +13,10 @@
  '(backup-by-copying-when-linked t)
  '(blink-cursor-mode t)
  '(buffer-face-mode-face (quote fixed-pitch))
+ '(c-basic-offset 4)
  '(c-default-style
    (quote
-    ((java-mode . "strousttrup")
+    ((java-mode . "stroustrup")
      (awk-mode . "awk")
      (other . "stroustrup"))))
  '(calendar-latitude 40.2444)
@@ -53,6 +54,7 @@
  '(flycheck-phpmd-rulesets (quote ("cleancode" "design" "unusedcode")))
  '(global-auto-revert-mode t)
  '(global-eclim-mode t)
+ '(global-visible-mark-mode t)
  '(gnutls-trustfiles
    (quote
     ("/etc/ssl/certs/ca-certificates.crt" "/etc/pki/tls/certs/ca-bundle.crt" "/etc/ssl/ca-bundle.pem" "/usr/ssl/certs/ca-bundle.crt" "/opt/local/share/curl/curl-ca-bundle.crt")))
@@ -68,7 +70,7 @@
  '(imenu-auto-rescan t)
  '(jabber-alert-message-hooks
    (quote
-    (jabber-message-wave jabber-message-echo jabber-message-scroll jabber-send-text send-text-message-hook)))
+    (jabber-message-wave jabber-message-echo jabber-message-scroll send-text-message-hook)))
  '(jabber-alert-message-wave
    "/Applications/Messages.app/Contents/Resources/Received Message.aiff")
  '(jabber-alert-muc-hooks
@@ -89,6 +91,10 @@
  '(magit-file-buffer-arguments nil)
  '(magit-log-auto-more t)
  '(magit-revision-show-gravatars nil)
+ '(magit-status-headers-hook
+   (quote
+    (magit-insert-diff-filter-header magit-insert-remote-header magit-insert-head-header magit-insert-upstream-header magit-insert-tags-header)))
+ '(markdown-command "multimarkdown")
  '(mazemax-char "C")
  '(mew-imap-ssl t)
  '(mode-require-final-newline nil)
@@ -191,12 +197,13 @@
    (quote
     ("openssl s_client -connect %h:%p -no_ssl2 -ign_eof" "gnutls-cli --insecure -p %p %h" "gnutls-cli --insecure -p %p %h --protocols ssl3")))
  '(tool-bar-mode nil)
+ '(tramp-verbose 9)
  '(transient-mark-mode nil)
  '(undo-tree-mode-lighter "")
  '(uniquify-buffer-name-style (quote post-forward-angle-brackets) nil (uniquify))
  '(visible-mark-faces (quote (visible-mark-face1 visible-mark-face2)))
  '(visible-mark-forward-faces (quote (visible-mark-forward-face1)))
- '(visible-mark-forward-max 1)
+ '(visible-mark-forward-max 0)
  '(visible-mark-max 2)
  '(web-mode-code-indent-offset 4)
  '(whitespace-line-column 10000)
@@ -210,7 +217,12 @@
  '(litable-result-face ((t (:inherit font-lock-preprocessor-face))))
  '(mazemax-face ((t (:background "gray42" :foreground "gray42" :inverse-video nil))))
  '(mazemax-free-face ((t (:background "gray0"))))
+ '(show-paren-match ((t (:background "steelblue3" :foreground "black"))))
  '(visible-mark-active ((t (:inherit visible-mark-face1))))
+ '(visible-mark-face1 ((t (:background "light salmon" :foreground "black"))))
+ '(visible-mark-face1-black ((t (:inherit visible-mark-face1 :foreground "black"))))
+ '(visible-mark-face2 ((t (:background "light goldenrod" :foreground "black"))))
+ '(visible-mark-face2-black ((t (:inherit visible-mark-face2 :foreground "black"))))
  '(whitespace-empty ((t nil)))
  '(whitespace-indentation ((t nil)))
  '(whitespace-line ((t nil)))
