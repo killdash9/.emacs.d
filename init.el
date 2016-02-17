@@ -1,11 +1,5 @@
 ;;; * Custom File
 (setq custom-file "~/.emacs.d/custom.el")
-;;; * Load Path
-(add-to-list 'load-path "~/.emacs.d/site-lisp/")
-;; add all subdirectories of site-lisp to load path as well
-(mapc
- (lambda (path) (add-to-list 'load-path path))
- (split-string (shell-command-to-string "find ~/.emacs.d/site-lisp -type d -d 1") "[\r\n]+"))
 
 ;;; * Package Framework
 (setq package-archives '(("gnu"       . "http://elpa.gnu.org/packages/")
@@ -14,6 +8,15 @@
 
 (package-initialize)
 (setq package-enable-at-startup nil) ;; keep it from re-loading the packages after the init file has run
+
+;;; * Load Path
+;; adding this to the load path after package-initialize causes
+;; site-lisp paths to override elpa paths.
+(add-to-list 'load-path "~/.emacs.d/site-lisp/")
+;; add all subdirectories of site-lisp to load path as well
+(mapc
+ (lambda (path) (add-to-list 'load-path path))
+ (split-string (shell-command-to-string "find ~/.emacs.d/site-lisp -type d -d 1") "[\r\n]+"))
 
 (when (not (require 'use-package nil t))
     (package-refresh-contents)
@@ -603,9 +606,8 @@
 
 ;;; *** cssh
 (use-package cssh
-  :bind ("C-;" . shell-remote-open;cssh-term-remote-open
-         )
   :config (progn
+            (bind-key "C-;" 'shell-remote-open)
             (cssh-define-global-bindings)))
 
 ;;; *** shell-remote-open
@@ -721,6 +723,11 @@
   (progn
     ;(setq starttls-extra-arguments (list "--insecure" ))
 
+    (defun switch-to-newspapers-group ()
+      (interactive)
+      (switch-to-buffer "*-jabber-groupchat-newspapers@conference.iarchives.com-*"))
+    
+    (bind-key "s-n" 'switch-to-newspapers-group)
     (add-hook 'jabber-chat-mode-hook 'visual-line-mode)
 
     ;; get backlog by pressing up past top
@@ -1058,7 +1065,7 @@ strings and will be called on completion."
           ;; (global-set-key (kbd "M-x") 'execute-extended-command)
           ))
 ;;; *** ido
-(use-package ido
+'(use-package ido
   :init
   (ido-mode 1)
   :config
@@ -1105,15 +1112,7 @@ strings and will be called on completion."
            (let ((index-alist (flatten-index (cons "" index-alist) "")))
              ad-do-it))))
 
-    (defun find-file-sudo ()
-      "Find file as root if necessary."
-      (interactive)
-      (when buffer-file-name
-        (unless (file-writable-p buffer-file-name)
-          (message "file is %s" buffer-file-name)
-          (find-alternate-file (if (file-remote-p buffer-file-name) 
-                                   (replace-regexp-in-string "/[^:]*\\\(:.*\\\):" (concat "/ssh\\1|sudo:" (with-parsed-tramp-file-name buffer-file-name nil host) ":") buffer-file-name)
-                                 (concat "/sudo:root@localhost:" buffer-file-name))))))
+
     
     ;; from http://emacsredux.com/blog/2013/04/21/edit-files-as-root/
     '(advice-add 'dired-find-file :after #'find-file-sudo)
@@ -1122,6 +1121,15 @@ strings and will be called on completion."
     '(advice-remove 'ido-find-file  #'find-file-sudo)
     ))
 
+(defun find-file-sudo ()
+  "Find file as root if necessary."
+  (interactive)
+  (when buffer-file-name
+    (unless (file-writable-p buffer-file-name)
+      (message "file is %s" buffer-file-name)
+      (find-alternate-file (if (file-remote-p buffer-file-name) 
+                               (replace-regexp-in-string "/[^:]*\\\(:.*\\\):" (concat "/ssh\\1|sudo:" (with-parsed-tramp-file-name buffer-file-name nil host) ":") buffer-file-name)
+                             (concat "/sudo:root@localhost:" buffer-file-name))))))
 ;;; *** mwheel
 (use-package mwheel
   :init
