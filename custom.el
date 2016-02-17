@@ -99,6 +99,7 @@
  '(mew-imap-ssl t)
  '(mode-require-final-newline nil)
  '(multi-term-program-switches "-l")
+ '(ns-pop-up-frames nil)
  '(org-agenda-files (quote ("~/org/life.org" "~/org/flagged.org")))
  '(org-agenda-include-diary t)
  '(org-agenda-prefix-format
