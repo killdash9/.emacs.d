@@ -133,8 +133,10 @@
   :commands xkcd)
 ;;; ** Editing
 ;;; *** type-break-mode
-(use-package type-break-mode
-  :config ()
+(use-package type-break
+  :config (progn
+            (type-break-mode)
+            (setq type-break-file-name nil))
   )
 ;;; *** hippie-expand
 (use-package hippie-expand
@@ -451,6 +453,7 @@
     (key-chord-define-global "ii" (lambda () (interactive) (find-file "~/.emacs.d/init.el")))
     (key-chord-define-global "LL" (lambda () (interactive) (find-file "~/org/life.org")))
     (key-chord-define-global "PP" 'org-passwords)
+    (key-chord-define emacs-lisp-mode-map "XX" 'eval-buffer)
     (key-chord-mode 1)))
 ;;; *** flycheck
 (use-package flycheck
@@ -558,12 +561,16 @@
     (ad-activate 'comint-previous-input)))
 
 ;;; *** shell-switcher
-(use-package shell-switcher
-  :ensure t
-  :bind (("C-'" . shell-switcher-switch-buffer)
-         ("C-x 4 '" . shell-switcher-switch-buffer-other-window)
-         ("C-M-'" . shell-switcher-new-shell))
-  :config (shell-switcher-mode 1))
+;; (use-package shell-switcher
+;;   :ensure t
+;;   :bind (("C-'" . shell-switcher-switch-buffer)
+;;          ("C-x 4 '" . shell-switcher-switch-buffer-other-window)
+;;          ("C-M-'" . shell-switcher-new-shell))
+;;   :config (shell-switcher-mode 1))
+
+;;; *** better-shell
+(use-package better-shell
+  :bind* (("C-'" . better-shell-shell)))
 
 ;;; *** shell
 (use-package shell
@@ -620,6 +627,10 @@
 ;(bind-key "C-;" 'shell-remote-open)
 
 ;;; ** External System Integration
+;;; *** reveal-in-osx-finder
+(use-package reveal-in-osx-finder
+  :ensure t
+  :commands reveal-in-osx-finder)
 ;;; *** dig
 (use-package dig
   :config
@@ -682,7 +693,10 @@
     (defun my-file-accessible-directory-p (orig-func &rest args)
       (and (apply orig-func args)
            (file-directory-p (car args))))
-    (advice-add 'file-accessible-directory-p :around 'my-file-accessible-directory-p)))
+    (advice-add 'file-accessible-directory-p :around 'my-file-accessible-directory-p)
+    ;; view specfic version when looking at log
+    (define-key magit-commit-section-map "v" 'magit-find-file)
+    ))
 
 ;;; *** magit-gh-pulls
 (use-package magit-gh-pulls
@@ -725,7 +739,7 @@
 
     (defun switch-to-newspapers-group ()
       (interactive)
-      (switch-to-buffer "*-jabber-groupchat-newspapers@conference.iarchives.com-*"))
+      (pop-to-buffer "*-jabber-groupchat-newspapers@conference.iarchives.com-*"))
     
     (bind-key "s-n" 'switch-to-newspapers-group)
     (add-hook 'jabber-chat-mode-hook 'visual-line-mode)
