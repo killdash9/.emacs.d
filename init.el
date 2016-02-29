@@ -548,11 +548,11 @@
     (defadvice comint-previous-input (before move-to-end-first
                                              (&optional arg try-vscroll))
       "Move to the end of file before comint-previous-input is called"
-      (end-of-buffer))
+      (goto-char (point-max)))
     (defadvice comint-next-input (before move-to-end-first
                                          (&optional arg try-vscroll))
       "Move to the end of file before comint-next-input is called"
-      (end-of-buffer))
+      (goto-char (point-max)))
 
     (ad-activate 'comint-next-input)
     (ad-activate 'comint-previous-input)))
@@ -998,6 +998,7 @@ strings and will be called on completion."
 
 ;;; *** smartscan
 (use-package smartscan
+  :ensure t
   :bind (("M-n" . smartscan-symbol-go-forward)
          ("M-p" . smartscan-symbol-go-backward)))
 
