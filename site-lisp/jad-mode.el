@@ -88,7 +88,10 @@ command and load the decompiled file."
                           )))
        ;; the regexp below replaces /tmp/jarname.jar:ClassName.class with ClassName.class
        (jdc-javafile (replace-regexp-in-string "[^/:]+:" "" (concat (substring jdc-classfile 0 -5) jdc-extension)))
-       (command (concat jdc-command (when (not exists) " -d /tmp " ) jdc-parameter jdc-classfile " > /dev/null")))
+       (command (concat jdc-command (when (not exists) " -d /tmp " ) jdc-parameter (shell-quote-argument jdc-classfile) " > /dev/null"))
+       (default-directory "/tmp/") ;; this is needed to keep it from running the jad shell command on the remote machine if the jar/war is remote.
+       )
+    (message "jad command: %s" command)
     (shell-command command)
     (find-alternate-file jdc-javafile)))
 

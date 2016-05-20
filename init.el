@@ -13,6 +13,8 @@
 ;; adding this to the load path after package-initialize causes
 ;; site-lisp paths to override elpa paths.
 (add-to-list 'load-path "~/.emacs.d/site-lisp/")
+(add-to-list 'load-path "/usr/local/share/emacs/site-lisp/mu4e")
+
 ;; add all subdirectories of site-lisp to load path as well
 (mapc
  (lambda (path) (add-to-list 'load-path path))
@@ -132,11 +134,55 @@
   :ensure t
   :commands xkcd)
 ;;; ** Editing
+;;; *** keyfreq
+(use-package keyfreq
+  :ensure t
+  :config
+  (progn
+    (setq keyfreq-excluded-commands
+          '(self-insert-command
+            abort-recursive-edit
+            forward-char
+            backward-char
+            previous-line
+            next-line
+            mwheel-scroll
+            helm-previous-line
+            helm-next-line
+            mouse-drag-region
+            mouse-set-point
+            scroll-down-command
+            other-window
+            syntax-subword-backward-kill
+            helm-maybe-exit-minibuffer
+            revert-buffer
+            shell-active-space
+            scroll-up-line
+            helm-find-files
+            delete-backward-char
+            move-beginning-of-line
+            move-end-of-line
+            comint-send-input
+            comint-previous-input
+            dired-previous-line
+            end-of-buffer
+            comint-next-input
+            previous-line-or-jabber-backlog
+            dired-find-file
+            helm-M-x
+            yank
+            jabber-chat-buffer-send
+            helm-keyboard-quit
+            set-mark-command
+            switch-to-buffer
+            ))
+    (keyfreq-mode 1)
+    (keyfreq-autosave-mode 1)))
 ;;; *** type-break-mode
 (use-package type-break
   :config (progn
-            (type-break-mode)
-            (setq type-break-file-name nil))
+            (setq type-break-file-name nil)
+            (type-break-mode 1))
   )
 ;;; *** hippie-expand
 (use-package hippie-expand
@@ -425,8 +471,8 @@
 ;;; *** avy-zap
 
 (use-package avy-zap
-  :bind (("M-z" . avy-zap-to-char-dwim)
-         ("M-Z" . avy-zap-up-to-char-dwim))
+  :bind (("M-Z" . avy-zap-to-char-dwim)
+         ("M-z" . avy-zap-up-to-char-dwim))
   :config (setq avy-timeout-seconds .3)
   :ensure t)
 
@@ -502,7 +548,15 @@
     (setq vc-ignore-dir-regexp
           (format "\\(%s\\)\\|\\(%s\\)"
                   vc-ignore-dir-regexp
-                  tramp-file-name-regexp))))
+                  tramp-file-name-regexp))
+    (defun tramp-set-auto-save ()
+      (auto-save-mode -1)) ;; disable auto-save
+    (defun tramp-handle-find-backup-file-name (filename)
+      "Like `find-backup-file-name' for Tramp files."
+      (with-parsed-tramp-file-name filename nil
+        (tramp-run-real-handler 'find-backup-file-name (list filename))))
+    )
+  )
 ;;; *** multi-term
 (use-package multi-term
   :ensure t
@@ -558,7 +612,14 @@
       (goto-char (point-max)))
 
     (ad-activate 'comint-next-input)
-    (ad-activate 'comint-previous-input)))
+    (ad-activate 'comint-previous-input)
+
+    (defun comint-send-input-reattach (&rest args)
+      (when (and (eq major-mode 'shell-mode) (not (get-buffer-process (current-buffer))))
+        (shell (current-buffer))))
+
+    (advice-add 'comint-send-input :before 'comint-send-input-reattach )
+    ))
 
 ;;; *** shell-switcher
 ;; (use-package shell-switcher
@@ -577,6 +638,12 @@
   :commands shell
   :config
   (progn
+    (defun unstick-ansi-color-codes ()
+      (interactive)
+      (end-of-buffer)
+      (insert "echo -e \"\033[m\"")
+      (comint-send-input nil t))
+    
     (defun shell-active-space ()
       (interactive)
       (cond ((save-excursion
@@ -627,10 +694,38 @@
 ;(bind-key "C-;" 'shell-remote-open)
 
 ;;; ** External System Integration
+;;; *** mu4e
+(use-package mu4e
+  :config
+  (progn
+    (setq
+     message-send-mail-function   'smtpmail-send-it
+     message-send-mail-function 'message-smtpmail-send-it
+     smtpmail-default-smtp-server "mail.ancestry.com"
+     smtpmail-smtp-server         "mail.ancestry.com"
+     smtpmail-smtp-service 25
+     smtpmail-local-domain        "ancestry.com"
+     smtpmail-stream-type nil
+     smtpmail-auth-credentials '(("mail.ancestry.com" 25 "rblack@ancestry.com" "CudqCnLm8TAT1NyO"))
+     smtpmail-starttls-credentials nil ;'(("mail.ancestry.com" 25 nil nil))
+     mu4e-sent-folder "/Sent Items"
+     mu4e-drafts-folder "/Drafts"
+     mu4e-trash-folder "/Deleted Items"
+
+     user-mail-address "rblack@ancestry.com"
+
+     mu4e-get-mail-command "offlineimap"
+     message-kill-buffer-on-exit t
+
+     mu4e~get-mail-password-regexp "^Enter password for account 'Remote': $"
+     )
+    ))
+
 ;;; *** reveal-in-osx-finder
 (use-package reveal-in-osx-finder
   :ensure t
-  :commands reveal-in-osx-finder)
+  :bind ("s-o". reveal-in-osx-finder))
+
 ;;; *** dig
 (use-package dig
   :config
@@ -706,7 +801,32 @@
 
 ;;; *** restclient
 (use-package restclient
-  :mode (("\\.rest$" . restclient-mode)))
+  :mode (("\\.rest$" . restclient-mode))
+  :config
+  (progn
+    (defun restclient-expand-whitespace ()
+      (interactive)
+      (with-current-buffer restclient-same-buffer-response-name
+        (goto-char (point-min))
+        (while (search-forward "\\n" nil t)
+          (replace-match "\n" nil t))
+        (goto-char (point-min))
+        (while (search-forward "\\t" nil t)
+          (replace-match "\t" nil t)))
+      (goto-char (point-min)))
+    
+    (defun restclient-indexer-process ()
+      (interactive)
+      (restclient-expand-whitespace)
+      (highlight-lines-matching-regexp "indexer")
+      (highlight-lines-matching-regexp "Caused by" 'hi-pink))
+
+    (add-hook 'restclient-response-loaded-hook 'restclient-indexer-process)
+
+    ;; fix syntax table so hippie-expand works on query parameters
+    (modify-syntax-entry ?& "." restclient-mode-syntax-table) ;; punctuation
+    
+    ))
 
 ;;; *** google-this
 '(use-package google-this
@@ -737,12 +857,19 @@
   (progn
     ;(setq starttls-extra-arguments (list "--insecure" ))
 
+    (defun switch-to-active-jid-or-newspapers-group ()
+      (interactive)
+      (jabber-activity-switch-to
+       (car
+        (append jabber-activity-jids (list "newspapers@conference.iarchives.com")))))
+    
     (defun switch-to-newspapers-group ()
       (interactive)
       (pop-to-buffer "*-jabber-groupchat-newspapers@conference.iarchives.com-*"))
-    
+
+    (key-chord-define-global "jj" 'switch-to-active-jid-or-newspapers-group)
     (bind-key "s-n" 'switch-to-newspapers-group)
-    (add-hook 'jabber-chat-mode-hook 'visual-line-mode)
+    ;;(add-hook 'jabber-chat-mode-hook 'visual-line-mode)
 
     ;; get backlog by pressing up past top
     (defun previous-line-or-jabber-backlog ()
@@ -766,6 +893,9 @@
     
     (defun helm-jabber-chat-with ()
       (interactive)
+      (unless jabber-connections
+        (jabber-connect-all)
+        (sit-for 2))
       (helm :sources (list (helm-jabber-chat-source "Jabber Online Contacts"
                                                     'jabber-roster-user-online (lambda (x) (get x 'connected)))
                            (helm-jabber-chat-source "Jabber Offline Contacts"
@@ -942,9 +1072,15 @@ strings and will be called on completion."
   :ensure t
   :commands projectile-global-mode
   :init (projectile-global-mode)
-  :config (progn
-	    (setq projectile-completion-system 'helm)
-	    (diminish 'projectile-mode)))
+  :config
+  (progn
+    (setq projectile-completion-system 'helm)
+    (diminish 'projectile-mode)
+    (defun projectile-project-root-advice (orig-func &rest args)
+      (if (file-remote-p default-directory)
+          nil ;; no projectile stuff in remote directores.  
+        (apply orig-func args)))
+    (advice-add 'projectile-project-root :around 'projectile-project-root-advice)))
 
 ;;; *** helm-projectile
 (use-package helm-projectile
@@ -981,7 +1117,8 @@ strings and will be called on completion."
     (key-chord-define-global "SS" 'helm-projectile-ag)
     (key-chord-define-global "FF" 'helm-projectile-find-file)
     '(defalias 'helm-ff-run-grep 'helm-projectile-ag)
-    '(defalias 'helm-projectile-grep 'helm-projectile-ag)))
+    ;; this is when you press C-s after C-c p p
+    (defalias 'helm-projectile-grep 'helm-find-files-ag)))
 
 ;;; *** grep
 (use-package grep
@@ -1033,7 +1170,8 @@ strings and will be called on completion."
   (define-key occur-edit-mode-map (kbd "C-x C-s" ) 'occur-save)
   ;; key bindings to mirror dired
   (define-key occur-edit-mode-map (kbd "C-x C-q" ) 'occur-cease-edit)
-  (define-key occur-mode-map (kbd "C-x C-q") 'occur-edit-mode))
+  (define-key occur-mode-map (kbd "C-x C-q") 'occur-edit-mode)
+  )
 
 ;;; *** swiper
 (use-package swiper
@@ -1041,7 +1179,7 @@ strings and will be called on completion."
          ("C-r" . swiper-or-isearch-backward))
   :config
   (progn
-    (setq isearch-modes '(shell-mode term-mode Info-mode messages-buffer-mode pdf-view-mode))
+    (setq isearch-modes '(shell-mode term-mode Info-mode messages-buffer-mode pdf-view-mode log4j-mode))
     (setq ivy-display-style 'fancy)
     (defun swiper-or-isearch-forward ()
       (interactive)
@@ -1176,8 +1314,8 @@ strings and will be called on completion."
            )
           ("s-r" . helm-imenu)
           ;("M-y" . helm-show-kill-ring) ;; find something better to bind this to. 
-          ("C-h a" . helm-apropos)
-          ("C-h SPC" . helm-all-mark-rings)
+          ("C-? a" . helm-apropos)
+          ("C-? SPC" . helm-all-mark-rings)
           ("C-x C-f" . helm-find-files)
           ("s-g" . helm-google-suggest))
   :commands (helm-resume)
@@ -1253,6 +1391,12 @@ strings and will be called on completion."
   :config
   (progn
     (add-hook 'js2-mode-hook 'js2-imenu-extras-mode)
+    (defun js2-short-mode-name ()
+      (setq mode-name "JS"))
+    (add-hook 'js2-mode-hook 'js2-short-mode-name)
+    (defun js2-indent-comments ()
+      (local-set-key (kbd "RET") 'c-indent-new-comment-line))
+    (add-hook 'js2-mode-hook 'js2-indent-comments)
     (use-package ac-js2
       :ensure t
       :config
@@ -1261,9 +1405,7 @@ strings and will be called on completion."
         (setq ac-js2-evaluate-calls t) ;; installation instructions from ac-js2, for auto-complete in browser)
         (require 'jquery-doc)
         (add-hook 'js2-mode-hook 'jquery-doc-setup)
-        (defun js2-short-mode-name ()
-          (setq mode-name "JS"))
-        (add-hook 'js2-mode-hook 'js2-short-mode-name)
+
         ))
 
     (use-package js2-refactor
@@ -1444,7 +1586,8 @@ strings and will be called on completion."
 ;;; *** web-mode
 (use-package web-mode
   :mode (("\\.tpl\\'" . web-mode)
-         ("\\.jsp\\'" . web-mode))
+         ("\\.jsp\\'" . web-mode)
+         ("\\.asp\\'" . web-mode))
   :config
   (progn
     (add-hook 'web-mode-hook
@@ -1463,6 +1606,23 @@ strings and will be called on completion."
 (use-package jad-mode
   :mode "\\.class$")
 
+;;; *** log4j-mode
+(use-package log4j-mode
+  :ensure t
+  :mode (("\\.log$" . log4j-mode)
+         ("\\.log\\." . log4j-mode)
+         ("catalina\\.out" . log4j-mode))
+  :config
+  (progn
+    (defun log4j-mode-turn-on-font-lock ()
+      (set (make-local-variable 'font-lock-support-mode) 'jit-lock-mode))
+    (defun highlight-stack-trace ()
+      (highlight-lines-matching-regexp "Caused by" 'hi-pink)
+      (highlight-lines-matching-regexp "at com.ancestry" 'hi-green))
+    
+    (add-hook 'log4j-mode-hook 'log4j-mode-turn-on-font-lock )
+    (add-hook 'log4j-mode-hook 'highlight-stack-trace )))
+
 ;;; *** cc-mode
 (use-package cc-mode
   :mode (("\\.jad$" . java-mode)
@@ -1479,6 +1639,10 @@ strings and will be called on completion."
     (add-hook 'java-mode-hook 'smartparens-mode)
     (add-hook 'c-mode-hook 'my-c-setup)
     (add-hook 'java-mode-hook 'my-c-setup)
+    (defun java-indent-comments ()
+      (local-set-key (kbd "RET") 'c-indent-new-comment-line))
+    (add-hook 'java-mode-hook 'java-indent-comments)
+    
     (define-key c-mode-base-map ";" 'maio/electric-semicolon)
     
     (defun c-newline ()
@@ -1618,8 +1782,49 @@ strings and will be called on completion."
   :mode  (("\\.xml$" . nxml-mode)
           ("\\.xsd$" . nxml-mode))
   :config
-  ;; make nxml operate on nested element not just tags
-  (setq nxml-sexp-element-flag t))
+  (progn
+    ;; make nxml operate on nested element not just tags
+    (setq nxml-sexp-element-flag t)
+
+    ;; this is a slight mod to the existing function that doesn't
+    ;; consider a line for indentation if it is all whitespace
+    (defun nxml-compute-indent-in-delimited-token (pos open-delim close-delim)
+      "Return the indent for a line that starts inside a token with delimiters.
+OPEN-DELIM and CLOSE-DELIM are strings giving the opening and closing
+delimiters.  POS is the position of the first non-whitespace character
+of the line.  This expects the xmltok-* variables to be set up as by
+`xmltok-forward'."
+      (cond ((let ((end (+ pos (length close-delim))))
+               (and (<= end (point-max))
+                    (string= (buffer-substring-no-properties pos end)
+                             close-delim)))
+             (goto-char xmltok-start))
+            ((progn
+               (goto-char pos)
+               ;; This is the expression that was changed.
+               ;; Was
+               ;; (forward-line -1)
+               ;; new expression follows.  Skips empty lines.
+               (loop
+                do (forward-line -1)
+                while (looking-at "[ \t]*$"))
+               (<= (point) xmltok-start))
+             (goto-char (+ xmltok-start (length open-delim)))
+             (when (and (string= open-delim "<!--")
+                        (looking-at " "))
+               (goto-char (1+ (point)))))
+            (t (back-to-indentation)))
+      (current-column))
+    
+    (defun nxml-fix-comments ()
+      (setq comment-continue " "))
+    (add-hook 'nxml-mode-hook 'nxml-fix-comments)))
+
+;;; *** mz-comment-fix
+(use-package mz-comment-fix
+  :config
+  ;; fixes nested comment behavior in nxmlo
+  (add-to-list 'comment-strip-start-length (cons 'nxml-mode 3)))
 
 
 ;;; *** actionscript-mode
@@ -1667,14 +1872,24 @@ strings and will be called on completion."
 ;;; *** calc
 (use-package calc
   :config
-  (defun calc-call (fun &rest args)
-    (string-to-number
-     (math-format-value
-      (apply
-       (intern (concat "calcFunc-" (symbol-name fun)))
-       (mapcar
-        (lambda (s) (math-read-number-simple (number-to-string s)))
-        args))))))
+  (progn
+    (defun calc-call (fun &rest args)
+      (string-to-number
+       (math-format-value
+        (apply
+         (intern (concat "calcFunc-" (symbol-name fun)))
+         (mapcar
+          (lambda (s) (math-read-number-simple (number-to-string s)))
+          args)))))
+    (defun calc-embedded-refresh-everything ()
+      (interactive)
+      '(calc-embedded-update-formula nil)
+      (calc-embedded-activate 1)
+      (calc-embedded-update-formula 1)
+      (mapc (lambda (info) (hlt-highlight-region (elt info 2) (elt info 3) 'hi-green)) (cdr (assq (current-buffer) calc-embedded-active)))
+      (set-transient-map '(keymap) nil (lambda () (hlt-unhighlight-region)))
+      )))
+
 ;;; ** File, Window and Buffer Management
 ;;; *** windmove
 (use-package windmove
@@ -1739,9 +1954,11 @@ strings and will be called on completion."
         kept-old-versions 0
         backup-by-copying t
         version-control t
-        backup-dir  "/Users/rblack/.saves"
+        backup-dir  "~/.saves"
         backup-directory-alist `(("." . ,backup-dir))
         tramp-backup-directory-alist backup-directory-alist)
+
+
 
   ;; make sure backup directory exists
   (if (not (file-exists-p backup-dir))
@@ -1925,8 +2142,52 @@ strings and will be called on completion."
          ("C-x 4 C-j" . dired-jump-other-window))
   )
 
+;;; *** dired-narrow
+(use-package dired-narrow
+  :ensure t
+  :bind (:map dired-mode-map
+              ("/" . dired-narrow)))
+
 ;;; *** window.el customizations
 (progn                                  ;window.el customizations
+
+  ;; get window configurations to ignore point
+  (progn
+    (defun pointless-window-configuration-to-register (register &optional _arg)
+      "Store the window configuration of the selected frame in register REGISTER.
+Use \\[jump-to-register] to restore the configuration.
+Argument is a character, naming the register.
+
+Interactively, reads the register using `register-read-with-preview'."
+      (interactive (list (register-read-with-preview
+                          "Window configuration to register: ")
+                         current-prefix-arg))
+      ;; current-window-configuration does not include the value
+      ;; of point in the current buffer, so record that separately.
+      (set-register register (cons 'pointless (window-state-get))))
+
+    (defun pointless-describe-register-1 (orig-func register &optional verbose)
+      (let ((val (get-register register)))
+        (if (and (consp val) (eq (car val) 'pointless))
+            (progn
+              (princ "Register ")
+              (princ (single-key-description register))
+              (princ " contains a pointless window configuration."))
+          (funcall orig-func register verbose))))
+    
+    (defun pointless-jump-to-register (orig-func &rest args)
+      (let ((val (get-register (car args))))
+        (if (and (consp val) (eq (car val) 'pointless))
+            (cl-letf
+                (((symbol-function 'set-window-point) 'ignore) ;; make these no-ops.
+                 ((symbol-function 'set-window-start) 'ignore))
+              (window-state-put (cdr val) (frame-root-window)))
+          (apply orig-func args))))
+    
+    (advice-add 'jump-to-register :around #'pointless-jump-to-register)
+    (advice-add 'describe-register-1 :around #'pointless-describe-register-1)
+    (bind-key "C-x r w" 'pointless-window-configuration-to-register))
+  
   (bind-key* "M-o" 'other-window)
   (bind-key "C-x 6" 'toggle-window-split)
   (defun other-window-1 (&optional size)
@@ -1939,6 +2200,11 @@ strings and will be called on completion."
   (bind-key "C-S-v" 'scroll-up-line)
   (bind-key "M-V" 'scroll-down-line)
   (bind-key "C-=" 'enlarge-window)
+
+  ;; horizontal scrolling with mouse
+  (setq hscroll-step 10)
+  (global-set-key [wheel-right] (lambda () (interactive) (scroll-left hscroll-step t)))
+  (global-set-key [wheel-left] (lambda () (interactive) (scroll-right hscroll-step t)))
 
   ;; from http://whattheemacsd.com/buffer-defuns.el-03.html
   (defun toggle-window-split ()
@@ -1976,15 +2242,15 @@ strings and will be called on completion."
                                    (not (window-dedicated-p window))))
          "Window '%s' is dedicated"
        "Window '%s' is normal")
-     (current-buffer))))
+     (current-buffer)))
 
 ;;; *** savehist
-(use-package savehist
-  :init
-  (progn
-    (savehist-mode 1)
-    (setq savehist-ignored-variables '(hist)) ;;not sure what hist is, but it's not a list so autosave croaks on it
-    (setq savehist-additional-variables '(kill-ring search-ring regexp-search-ring))))
+  (use-package savehist
+    :init
+    (progn
+      (savehist-mode 1)
+      (setq savehist-ignored-variables '(hist)) ;;not sure what hist is, but it's not a list so autosave croaks on it
+      (setq savehist-additional-variables '(kill-ring search-ring regexp-search-ring)))))
 
 ;;; *** jka-cmpr-hook
 (use-package jka-cmpr-hook
@@ -2005,6 +2271,19 @@ strings and will be called on completion."
 (use-package ns-win
   :config
   (global-set-key [M-drag-n-drop] 'ns-drag-n-drop))
+;;; *** archive
+(use-package archive
+  :config
+  (progn
+
+    (defun archive-extract-wrapper (orig-func &rest args)
+      (let ((archive-remote (or archive-remote (string-match "^http" (buffer-file-name))))
+            (default-directory "/tmp"))
+        (apply orig-func args)))
+    (advice-add 'archive-extract :around 'archive-extract-wrapper)
+    
+    ))
+
 ;;; ** org
 (use-package org
   :commands org-mode
@@ -2024,6 +2303,7 @@ strings and will be called on completion."
   :config
   (progn
 
+    (key-chord-define org-mode-map "uu" 'calc-embedded-refresh-everything)
     (setq org-ellipsis "…")
     (key-chord-define org-mode-map "**" 'org-ctrl-c-star)
     (add-hook 'org-mode-hook
@@ -2138,7 +2418,7 @@ strings and will be called on completion."
     (bind-key (kbd "C-c s") 'org-table-sum-column org-mode-map)
     (bind-key (kbd "C-s") 'isearch-forward org-mode-map)
     (bind-key (kbd "C-r") 'isearch-backward org-mode-map)
-    (add-hook 'org-mode-hook 'visual-line-mode)
+    ;;(add-hook 'org-mode-hook 'visual-line-mode)
     ;;(require 'org-mac-iCal)
     ;;(run-with-timer 0 (* 8 60 60) 'org-mac-iCal) ; update from calendars every 8 hours
 
@@ -2222,7 +2502,7 @@ applied."
              "* %^{Title|%(org-passwords-chrome-title)}
 :PROPERTIES:
 :URL: %^{URL|%(org-passwords-chrome-url)}
-:PASSWORD: %^{PASSWORD|%(org-passwords-generate-password-without-symbols nil 15)}
+:PASSWORD: %^{PASSWORD|%(org-passwords-generate-password-with-symbols nil 16)}
 :CREATED: %U
 :END:
 %^{USERNAME}p")))
@@ -2326,17 +2606,40 @@ Requires ImageMagick installation"
     ;;(add-hook 'ediff-load-hook 'my-ediff-load-hook)
     (my-ediff-load-hook)
 
-    
     (defun ediff-copy-both-to-C ()
       (interactive)
       (let ((n ediff-current-difference)
             (b ediff-control-buffer))
-       (ediff-copy-diff n nil 'C nil
-                        (concat
-                         (ediff-get-region-contents n 'A b)
-                         (ediff-get-region-contents n 'B b)))))
+        (ediff-copy-diff n nil 'C nil
+                         (concat
+                          (ediff-get-region-contents n 'A b)
+                          (ediff-get-region-contents n 'B b)))))
+    
     (defun add-d-to-ediff-mode-map () (define-key ediff-mode-map "d" 'ediff-copy-both-to-C))
-    (add-hook 'ediff-keymap-setup-hook 'add-d-to-ediff-mode-map)))
+    (add-hook 'ediff-keymap-setup-hook 'add-d-to-ediff-mode-map)
+
+    ;; Tried to hack in refinements on ancestor.  This ended up being too hard.
+    '(defun refine-ancestor-advice (orig-func &optional file-A file-B file-C reg-num)
+      (if (and ediff-3way-job (get-buffer-window ediff-ancestor-buffer) (not file-C))
+          (let ((tmp-buffer (get-buffer-create ediff-tmp-buffer))
+                (ediff-buffer-C ediff-ancestor-buffer)
+                file-Ancestor)
+            (ediff-wordify
+             (ediff-get-diff-posn 'Ancestor 'beg n)
+             (ediff-get-diff-posn 'Ancestor 'end n)
+             ediff-ancestor-buffer
+             tmp-buffer
+             ediff-control-buffer)
+            (setq file-Ancestor
+                  (ediff-make-temp-file tmp-buffer "fineDiffAncestor"))
+            (funcall orig-func file-A file-B file-Ancestor reg-num))
+        (funcall orig-func file-A file-B file-C reg-num))
+      )
+
+    '(advice-add 'ediff-setup-fine-diff-regions :around #'refine-ancestor-advice)
+    (advice-remove 'ediff-setup-fine-diff-regions  #'refine-ancestor-advice)
+
+    ))
   
 ;;; ** Company-Specific Packages
 ;;; *** jenkins-build
@@ -2362,6 +2665,39 @@ Requires ImageMagick installation"
   :commands (ocr))
 
 ;;; * Misc Functions
+
+(global-set-key (kbd "s-h") help-map)
+(global-set-key (kbd "C-h") 'delete-backward-char)
+(global-set-key (kbd "M-h") 'backward-kill-word)
+
+;; fix for a NPE bug in eww/gnus
+(defun my-mm-url-form-encode-xwfu (orig-func &rest args)
+  (if (car args)
+      (apply orig-func args)
+    ""))
+
+(advice-add 'mm-url-form-encode-xwfu :around #'my-mm-url-form-encode-xwfu)
+
+(defun mm-url-form-encode-xwfu (chunk)
+  "Escape characters in a string for application/x-www-form-urlencoded.
+Blasphemous crap because someone didn't think %20 was good enough for encoding
+spaces.  Die Die Die."
+  ;; This will get rid of the 'attributes' specified by the file type,
+  ;; which are useless for an application/x-www-form-urlencoded form.
+  (if (consp chunk)
+      (setq chunk (cdr chunk)))
+
+  (mapconcat
+   (lambda (char)
+     (cond
+      ((= char ?  ) "+")
+      ((memq char mm-url-unreserved-chars) (char-to-string char))
+      (t (upcase (format "%%%02x" char)))))
+   (mm-encode-coding-string chunk
+                            (if (fboundp 'find-coding-systems-string)
+                                (car (find-coding-systems-string chunk))
+                              buffer-file-coding-system))
+   ""))
 
 (defun get-random-element (list)
   "Returns a random element of LIST."
@@ -2500,21 +2836,11 @@ is a lot more readable without the ^M's getting in the way."
     (set-mark (line-end-position))
     (activate-mark))
   (apply orig-func args)
-  (c-indent-line-or-region))
+  ;;(c-indent-line-or-region)
+  (indent-for-tab-command)
+  )
 
 (advice-add 'comment-dwim :around #'killdash9/comment-dwim)
-
-(defun open-in-desktop ()
-  "Show current file in desktop (OS's file manager)."
-  (interactive)
-  (cond
-   ((string-equal system-type "windows-nt")
-    (w32-shell-execute "explore" (replace-regexp-in-string "/" "\\" default-directory t t)))
-   ((string-equal system-type "darwin") (shell-command "open ."))
-   ((string-equal system-type "gnu/linux")
-    (let ((process-connection-type nil)) (start-process "" nil "xdg-open" "."))
-    ;; (shell-command "xdg-open .") ;; 2013-02-10 this sometimes froze emacs till the folder is closed. ⁖ with nautilus
-    ) ))
 
 (defun range (min max)
   (when (<= min max)
@@ -2573,6 +2899,22 @@ is a lot more readable without the ^M's getting in the way."
       (org-cycle)
       (org-table-sort-lines nil ?N)))
   (pop-to-buffer "*word-statistics*"))
+
+(defun sql-copy-column ()
+  (interactive)
+  (save-excursion
+    (re-search-backward "^\\+-+\\+\n|")
+    (forward-line)
+    (forward-char 2)
+    (let ((start (point)))
+      (re-search-forward "^\+--")
+      (backward-char 6)
+      (copy-rectangle-as-kill start (point))
+      (with-temp-buffer
+        (yank-rectangle)
+        (delete-trailing-whitespace)
+        (kill-new (buffer-string)))
+      (message "Column copied"))))
 
 
 ;;; * Customization Variables

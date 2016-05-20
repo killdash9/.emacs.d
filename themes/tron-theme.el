@@ -35,7 +35,7 @@
  `(mode-line ((t (:foreground "#072d40" :background "#99bac7"))))
  `(region ((t (:background "#356a9c"))))
  `(font-lock-builtin-face ((t (:foreground "#559ff1"))))
- `(font-lock-comment-face ((t (:foreground "#575b5b"))))
+ `(font-lock-comment-face ((t (:foreground "gray55"))))
  `(font-lock-function-name-face ((t (:foreground "#ec9346"))))
  `(font-lock-keyword-face ((t (:foreground "#a4cee5"))))
  `(font-lock-string-face ((t (:foreground "#e8b778"))))
