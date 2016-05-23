@@ -15,10 +15,16 @@
 (add-to-list 'load-path "~/.emacs.d/site-lisp/")
 (add-to-list 'load-path "/usr/local/share/emacs/site-lisp/mu4e")
 
+(defun s-trim-right (s)
+  "Remove whitespace at the end of S."
+  (if (string-match "[ \t\n\r]+\\'" s)
+      (replace-match "" t t s)
+    s))
+
 ;; add all subdirectories of site-lisp to load path as well
 (mapc
  (lambda (path) (add-to-list 'load-path path))
- (split-string (shell-command-to-string "find ~/.emacs.d/site-lisp -type d -d 1") "[\r\n]+"))
+ (split-string (s-trim-right (shell-command-to-string "find ~/.emacs.d/site-lisp -type d -d 1")) "[\r\n]+"))
 
 (when (not (require 'use-package nil t))
     (package-refresh-contents)
@@ -134,50 +140,6 @@
   :ensure t
   :commands xkcd)
 ;;; ** Editing
-;;; *** keyfreq
-(use-package keyfreq
-  :ensure t
-  :config
-  (progn
-    (setq keyfreq-excluded-commands
-          '(self-insert-command
-            abort-recursive-edit
-            forward-char
-            backward-char
-            previous-line
-            next-line
-            mwheel-scroll
-            helm-previous-line
-            helm-next-line
-            mouse-drag-region
-            mouse-set-point
-            scroll-down-command
-            other-window
-            syntax-subword-backward-kill
-            helm-maybe-exit-minibuffer
-            revert-buffer
-            shell-active-space
-            scroll-up-line
-            helm-find-files
-            delete-backward-char
-            move-beginning-of-line
-            move-end-of-line
-            comint-send-input
-            comint-previous-input
-            dired-previous-line
-            end-of-buffer
-            comint-next-input
-            previous-line-or-jabber-backlog
-            dired-find-file
-            helm-M-x
-            yank
-            jabber-chat-buffer-send
-            helm-keyboard-quit
-            set-mark-command
-            switch-to-buffer
-            ))
-    (keyfreq-mode 1)
-    (keyfreq-autosave-mode 1)))
 ;;; *** type-break-mode
 (use-package type-break
   :config (progn
@@ -1871,6 +1833,9 @@ of the line.  This expects the xmltok-* variables to be set up as by
   :init (add-hook 'ses-mode-hook 'linum-mode))
 ;;; *** calc
 (use-package calc
+  :init
+  (progn
+    (setq calc-settings-file "~/.emacs.d/calc-settings.el"))
   :config
   (progn
     (defun calc-call (fun &rest args)
