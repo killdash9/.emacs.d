@@ -12,6 +12,7 @@
  '(atari-click-mode t)
  '(auto-revert-verbose nil)
  '(backup-by-copying-when-linked t)
+ '(blink-cursor-blinks 0)
  '(blink-cursor-mode t)
  '(buffer-face-mode-face (quote fixed-pitch))
  '(c-basic-offset 4)
@@ -33,7 +34,7 @@
  '(custom-safe-themes
    (quote
     ("002f5512e880c0ab5609c1feb758884df35807f9cb00c2dc77d96664213c4936" "b987df2743acef44d0ea46d555ff4a5dcf522e0b7791ea0fca62315f034b04b8" "01ccbb2bbd660e98e3977a528bcf905f16cc86d4d881a4df03d3f98a3f611fa1" "46a8646bfe191df614aae7b9209bb3dc72a4259c0f5cacd7b61a03a65d470783" "6aa7714697f9e9f495c78fac77e40cef181e453916d1b19e691fa240116f9ec9" "7bc5c5e58a321ff198d92db4bb377b2e5928f56cc776efca69d45660754c2a3e" "a80f6a85d84170b67749782db7e1aa7c0339caf6d645879ba9924536f87db762" "11b82f1b39397638b5c26f3a6c038992a870b614a1d59455871aa9d2ecb47939" "a27c00821ccfd5a78b01e4f35dc056706dd9ede09a8b90c6955ae6a390eb1c1e" "0c3f22acd840eaa072cb23d6c786fa00a69697593ac9d931087b87e072262a61" "6788ec244e2cb7e03ec12264888f3ad956f6373e92c0f964288fb984dd628977" "815956f68af145fca4fca99354b218112ce634225705931c0a8f6cc7c2c821ab" "f4405fefab9d7828fd3e0876a21af95cfae7d03146fb95b6480118325b43e22c" "05861f7ac0f5445539cb45ec2c1c47b4434d2e3c98f1de329d590242a70694ab" "efb876a2714f5a68f60f9db2b55852f039de39043efe788086d391d054908d31" "09a8deda49fcf29d19225b9f04000e8df5bf63907471b8f7a22019b76ccf18fd" "ee0ab0c0064d76662eef47614a587b3316a81418e54090a41b8d9704a7fcfee1" default)))
- '(custom-theme-load-path (quote (custom-theme-directory t "~/.emacs.d/themes")))
+ '(custom-theme-load-path (quote (custom-theme-directory t "~/.emacs.d/themes")) t)
  '(debug-on-error nil)
  '(dired-dwim-target t)
  '(dired-guess-shell-alist-user
@@ -41,7 +42,6 @@
     (("\\.pdf\\'" "/Applications/Adobe\\ Reader.app/Contents/MacOS/AdobeReader" "pdftotext"))))
  '(dired-listing-switches "-alh")
  '(dirtrack-list (quote ("^\\(.*/.*\\)\\$ " 1)))
- '(display-time-day-and-date t)
  '(eclim-accepted-file-regexps (quote ("\\.java" "\\.groovy")))
  '(eclim-eclipse-dirs (quote ("/Applications/Eclipse.app/Contents/Eclipse/")))
  '(eclim-executable "/Applications/Eclipse.app/Contents/Eclipse/eclim")
@@ -54,6 +54,7 @@
  '(flycheck-php-phpmd-executable
    "/Users/rblack/code/hg/news-dev-frontend/vendor/phpmd/phpmd/src/bin/phpmd")
  '(flycheck-phpmd-rulesets (quote ("cleancode" "design" "unusedcode")))
+ '(git-messenger:use-magit-popup t)
  '(global-auto-revert-mode t)
  '(global-eclim-mode t)
  '(global-visible-mark-mode t)
@@ -93,6 +94,7 @@
  '(litable-result-format "=> %s ")
  '(load-prefer-newer t)
  '(magit-file-buffer-arguments nil)
+ '(magit-git-executable "/opt/local/bin/git")
  '(magit-log-auto-more t)
  '(magit-revision-show-gravatars nil)
  '(magit-status-headers-hook
@@ -104,19 +106,6 @@
  '(mode-require-final-newline nil)
  '(multi-term-program-switches "-l")
  '(ns-pop-up-frames nil)
- '(org-agenda-files (quote ("~/org/life.org" "~/org/flagged.org")))
- '(org-agenda-include-diary t)
- '(org-agenda-prefix-format
-   (quote
-    ((agenda . " %i %-12:c%?-12t% s%-10 e")
-     (timeline . "  % s")
-     (todo . " %i %-12:c")
-     (tags . " %i %-12:c")
-     (search . " %i %-12:c"))))
- '(org-agenda-restore-windows-after-quit nil)
- '(org-agenda-skip-scheduled-if-done t)
- '(org-agenda-start-on-weekday nil)
- '(org-agenda-window-setup (quote current-window))
  '(org-blank-before-new-entry (quote ((heading) (plain-list-item))))
  '(org-checkbox-hierarchical-statistics nil)
  '(org-completion-use-ido t)
@@ -132,7 +121,10 @@
      ("+"
       (:strike-through t)))))
  '(org-enforce-todo-dependencies t)
+ '(org-export-in-background t)
+ '(org-export-with-section-numbers nil)
  '(org-export-with-sub-superscripts nil)
+ '(org-export-with-toc nil)
  '(org-hide-emphasis-markers t)
  '(org-html-postamble nil)
  '(org-imenu-depth 3)
@@ -151,7 +143,9 @@
  '(org-support-shift-select t)
  '(org-use-speed-commands t)
  '(package-pinned-packages (quote ((csv-mode . "\"gnu\""))))
- '(package-selected-packages (quote (use-package)))
+ '(package-selected-packages
+   (quote
+    (messages-are-flowing org-ac git-messenger git-gutter git-gutter-fringe calfw org-gcal org-mime which-key ob-restclient org "org" paradox org-mac-link geben gnuplot jquery-doc typescript-mode nginx-mode expand-region flymake-yaml dockerfile-mode dot-mode web-mode graphviz-dot-mode ssh-config-mode golden-ratio window-purpose purpose better-shell buffer-flip command-log-mode css-eldoc ac-js2 jade php-extras php-eldoc js2-refactor alert zencoding-mode use-package-chords mc-extras impatient-mode restclient highlight gist avy ace-window org-bullets try try-package git-timemachine use-package)))
  '(paradox-automatically-star t)
  '(paradox-github-token t)
  '(php-manual-path "/Users/rblack/Downloads/php-chunked-xhtml")
@@ -169,7 +163,7 @@
      (org-export-with-toc . t)
      (org-export-with-section-numbers)
      (org-export-with-toc))))
- '(save-place nil nil (saveplace))
+ '(save-place-mode nil nil (saveplace))
  '(scroll-margin 3)
  '(send-mail-function (quote mailclient-send-it))
  '(shell-switcher-new-shell-function (quote shell-switcher-make-shell))
@@ -208,15 +202,13 @@
  '(tool-bar-mode nil)
  '(tramp-verbose 6)
  '(transient-mark-mode nil)
- '(type-break-demo-functions
-   (quote
-    (type-break-demo-boring type-break-demo-life type-break-demo-hanoi tron-demo)))
  '(undo-tree-mode-lighter "")
  '(uniquify-buffer-name-style (quote post-forward-angle-brackets) nil (uniquify))
  '(visible-mark-faces (quote (visible-mark-face1 visible-mark-face2)))
  '(visible-mark-forward-faces (quote (visible-mark-forward-face1)))
  '(visible-mark-forward-max 0)
  '(visible-mark-max 2)
+ '(warning-suppress-types (quote ((undo discard-info))))
  '(web-mode-code-indent-offset 4)
  '(whitespace-line-column 10000)
  '(yas-also-auto-indent-first-line t))
@@ -229,6 +221,7 @@
  '(litable-result-face ((t (:inherit font-lock-preprocessor-face))))
  '(mazemax-face ((t (:background "gray42" :foreground "gray42" :inverse-video nil))))
  '(mazemax-free-face ((t (:background "gray0"))))
+ '(mu4e-modeline-face ((t (:inherit helm-candidate-number))))
  '(show-paren-match ((t (:background "steelblue3" :foreground "black"))))
  '(visible-mark-active ((t (:inherit visible-mark-face1))))
  '(visible-mark-face1 ((t (:background "light salmon" :foreground "black"))))
