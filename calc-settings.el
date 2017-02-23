@@ -13,12 +13,16 @@
 
 
 ;;; Custom units stored by Calc on Wed Jan 27 16:01:01 2016
-(setq math-additional-units '(
-  (TB "1024 * GB" "Terabyte")
-  (GB "1024 * MB" "Gigabyte")
-  (MB "1024 * KB" "Megabyte")
-  (KB "1024 * B" "Kilobyte")
-  (B nil "Byte")
-))
+(setq math-additional-units
+      '((EB "1024 * PB" "Exabyte")
+        (PB "1024 * TB" "Petabyte")
+        (TB "1024 * GB" "Terabyte")
+        (GB "1024 * MB" "Gigabyte")
+        (MB "1024 * KB" "Megabyte")
+        (KB "1024 * B" "Kilobyte")
+        (B nil "Byte")
+        (month "yr / 12")
+        )
+      math-units-table nil)
 ;;; End of custom units
 
