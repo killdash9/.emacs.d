@@ -8,7 +8,7 @@
 (setq calc-simplify-mode 'units)
 (setq calc-language 'big)
 (setq calc-float-format '(fix 4))
-(setq calc-prefer-frac t)
+(setq calc-prefer-frac nil)
 ;;; End of mode settings
 
 
