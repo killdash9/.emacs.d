@@ -73,7 +73,8 @@
     (menu-bar-mode 1)
     ))
 
-
+;;; *** random-edit
+(use-package random-edit)
 
 ;;; *** zone
 (use-package zone
@@ -85,7 +86,7 @@
       :config
       (defadvice zone (around zone-dont-run-on-battery activate)
         "Only zone when under power"
-        (when (equal (cdr (assoc ?L (funcall battery-status-function))) "AC")
+        (when (or t (equal (cdr (assoc ?L (funcall battery-status-function))) "AC"))
           ad-do-it))
       )
     (use-package zone-matrix
@@ -93,9 +94,10 @@
       (progn
         (setq zmx-unicode-mode t)
         (setq zone-programs (vconcat zone-programs [zone-matrix]))
+        (setq zone-programs [random-edit])
         ))
     (setq zone-programs (remove-if (lambda (x) (member x '(zone-pgm-jitter zone-pgm-dissolve))) zone-programs))
-    (zone-when-idle 300)))
+    (zone-when-idle 3600)))
 
 ;;; *** fns.c
 (progn
@@ -110,6 +112,17 @@
 
 ;;; *** variable-pitch-modes
 (use-package variable-pitch-modes)
+
+;;; *** rainbow-mode
+; this package colors html-style colors such as #ff7700
+(use-package rainbow-mode
+  :ensure t
+  :config (rainbow-mode 1)
+  :diminish
+  )
+;;; *** diminish
+(use-package diminish
+  :ensure t)
 
 ;;(eval-after-load "isearch" '(require 'isearch+))
 ;;; ** Games
@@ -242,13 +255,23 @@
 
   
   (defun move-text-indent (&rest args)
-    (if (region-active-p)
-        (progn
-          (indent-region (region-beginning) (region-end))
-          ;; reactivate the mark
-          (activate-mark)
-          (setq deactivate-mark nil))
-      (indent-according-to-mode)))
+    (when
+        (member major-mode
+                '(emacs-lisp-mode lisp-mode
+                                  clojure-mode    scheme-mode
+                                  haskell-mode    ruby-mode
+                                  rspec-mode      ;;python-mode
+                                  c-mode          c++-mode
+                                  objc-mode       latex-mode
+                                  plain-tex-mode  php-mode
+                                  js2-mode java-mode))
+      (if (region-active-p)
+          (progn
+            (indent-region (region-beginning) (region-end))
+            ;; reactivate the mark
+            (activate-mark)
+            (setq deactivate-mark nil))
+        (indent-according-to-mode))))
   (advice-add 'move-text-up :after 'move-text-indent)
   (advice-add 'move-text-down :after 'move-text-indent)
   
@@ -352,7 +375,7 @@ sJoin string:")
                    '(emacs-lisp-mode lisp-mode
                                      clojure-mode    scheme-mode
                                      haskell-mode    ruby-mode
-                                     rspec-mode      python-mode
+                                     rspec-mode      ;;python-mode
                                      c-mode          c++-mode
                                      objc-mode       latex-mode
                                      plain-tex-mode  php-mode
@@ -453,7 +476,7 @@ sJoin string:")
 (use-package multiple-cursors
   :ensure t
   :bind (("C-." . mc/mark-next-like-this)
-         ("C-," . mc/mark-previous-like-this)
+         ;("C-," . mc/mark-previous-like-this)
          ("C-M-." . mc/mark-all-like-this-or-edit-lines)
          ("C-S-s-SPC" . mc/mark-all-like-this-or-edit-lines)
          ("C-S-SPC" . mc/mark-next-like-this-or-edit-lines))
@@ -549,21 +572,25 @@ sJoin string:")
     (key-chord-define-global "PP" 'org-passwords)
     (key-chord-define emacs-lisp-mode-map "XX" 'eval-buffer)
 
-    (defun scratch ()
+    (defun notes ()
       (interactive)
-      (if (eq (current-buffer) (get-buffer "scratch"))
-          (progn
-            (erase-buffer)
-            (message "Scratch buffer erased"))
-        (message "Switched to scratch buffer")
-        (switch-to-buffer "scratch")))
+      (let ((notes-filename (expand-file-name "~/.emacs.d/notes")))
+        (if (equal (buffer-file-name) notes-filename)
+            (progn
+              (save-buffer)
+              (erase-buffer)
+              (normal-mode)
+              (message "Notes saved and buffer erased"))
+          (message "Switched to notes file")
+          (find-file notes-filename))))
     
-    (key-chord-define-global "``" 'scratch)
+    (key-chord-define-global "``" 'notes)
     
     (key-chord-mode 1)))
 ;;; *** flycheck
 (use-package flycheck
-  :ensure t)
+  :ensure t
+  :config (global-flycheck-mode))
 ;;; *** hide-lines
 (use-package hide-lines
   :ensure t)
@@ -719,11 +746,21 @@ sJoin string:")
       ;(revert-buffer t t t)
       )
 
+    (defun shell-clear-screen (input)
+      (when (equal input "clear\n")
+        (comint-clear-buffer))) ; make clear command work in shell
+    
+    (defun shell-hide-some-escape-chars (output)
+      (replace-regexp-in-string "\\[[0-9]+[GKB]" "" output))
+
     (add-to-list
      'comint-preoutput-filter-functions
-     (lambda (output)
-       (replace-regexp-in-string "\\[[0-9]+[GKB]" "" output))) ;; hiding some escape characters
-    
+     'shell-hide-some-escape-chars) ;; hiding some escape characters
+
+    (add-to-list
+     'comint-input-filter-functions
+     'shell-clear-screen)
+
     (defun fix-ansi-color-codes ()
       (interactive)
       (end-of-buffer)
@@ -756,6 +793,7 @@ sJoin string:")
              (sql-magic-space))
             
             (t (insert " "))))
+
     (define-key shell-mode-map " " 'shell-active-space)
     (use-package mysql-shell)
     (add-hook 'shell-mode-hook 'dirtrack-mode )))
@@ -773,15 +811,142 @@ sJoin string:")
 
 ;;; ** External System Integration
 
-;;; *** org-gcal
-(use-package org-gcal
+;;; *** slack
+(use-package slack
+  :commands (slack-start)
+  :after (spaceline)
+  :bind
+  (("C-, c" . slack-channel-select)
+   ("C-, i" . slack-im-select))
+  :ensure t
+  :init
+  (setq slack-buffer-emojify t) ;; if you want to enable emoji, default nil
+  (setq slack-prefer-current-team t)
+  :config
+  (setq slack-request-timeout 500
+        slack-display-team-name nil
+        lui-time-stamp-format "[%Y-%m-%d %H:%M]"
+        lui-fill-column 70
+        )
+  
+  (patch-function 'slack-channel-list-update
+                  "(mapc #'(lambda (room)
+                            (slack-room-info-request room team))
+                        (oref team channels))"
+                  "")
+
+  (patch-function 'slack-group-list-update
+                  "(mapc #'(lambda (room)
+                            (slack-room-info-request room team))
+                        (oref team groups))"
+                  "")
+
+  (patch-function 'slack-im-update-room-list
+                  "(mapc #'(lambda (room)
+                          (slack-room-info-request room team))
+                      (oref team ims))"
+                  "")
+
+  
+
+  (unless slack-current-team
+    (slack-register-team
+     :name slack-name
+     :default t
+     :modeline-enabled nil
+     :client-id slack-client-id
+     :client-secret (slack-client-secret)
+     :token slack-token
+     :subscribed-channels slack-subscribed-channels
+     :full-and-display-names t
+     ))
+
+  (defun tracking-shorten-advice (orig-func &rest args)
+    (mapcar
+     (lambda (s)
+       (replace-regexp-in-string "^.*: *" "" s))
+     (apply orig-func args)))
+
+  (advice-add 'tracking-shorten :around 'tracking-shorten-advice)
+
+  (spaceline-define-segment slack-track
+    "Show the Slack buffers with new messages."
+    (when (fboundp 'tracking-status)
+      (tracking-status)))
+
+  (spaceline-emacs-theme 'slack-track)
+  (spaceline-toggle-slack-track-on)
+  
+  (defun slack-user-status (id team)
+    "")
+
+  (with-eval-after-load 'tracking
+    (define-key tracking-mode-map [f11]
+      #'tracking-next-buffer))
+  ;; Ensure the buffer exists when a message arrives on a
+  ;; channel that wasn't open.
+  (setq slack-buffer-create-on-notify t)
+
+  (define-key slack-mode-map "@"
+    (defun endless/slack-message-embed-mention ()
+      (interactive)
+      (call-interactively #'slack-message-embed-mention)
+      (insert " ")))
+  
+  (defun endless/-author-at (pos)
+    (if (or (> pos (point-max)) (< pos (point-min)))
+        nil
+      (replace-regexp-in-string
+       (rx "\n" (* anything)) ""
+       (or (get-text-property pos 'lui-raw-text) ""))))
+
+  (defun endless/-remove-slack-author ()
+    "Remove author here if it's the same as above."
+    (let ((author-here (endless/-author-at (point)))
+          (author-above (endless/-author-at (1- (point)))))
+      (when (and (looking-at-p (regexp-quote author-here))
+                 (equal author-here author-above))
+        (delete-region (1- (point))
+                       (1+ (line-end-position))))))
+
+  (defun endless/remove-slack-author-hook ()
+    "For usage in `lui-pre-output-hook'."
+    (when (derived-mode-p 'slack-mode)
+      (save-excursion
+        (goto-char (point-min))
+        (save-restriction
+          (widen)
+          (endless/-remove-slack-author)))))
+
+  (add-hook 'lui-pre-output-hook
+            #'endless/remove-slack-author-hook)
+
+  ;; Pretty straightforward.
+  (define-key slack-mode-map (kbd "C-c C-d")
+    #'slack-message-delete)
+  (define-key slack-mode-map (kbd "C-c C-e")
+    #'slack-message-edit)
+  (define-key slack-mode-map (kbd "C-c C-r")
+    #'slack-message-add-reaction)
+  (define-key slack-mode-map (kbd "C-c C-k")
+    #'slack-channel-leave)
+
+  )
+
+(use-package alert
+  :commands (alert)
   :ensure t
   :config
-  (setq org-gcal-client-id "528914789879-qcluem2thomvour2g6efffp0atlgi01a.apps.googleusercontent.com"
-        org-gcal-client-secret "zTho_NDMzFaWMyz0hVk5DJQn"
-        org-gcal-file-alist '(("black.russell@gmail.com" .  "~/Dropbox/orgfiles/gcal.org")
-                              ("mollicoa@gmail.com" .  "~/Dropbox/orgfiles/mollicoa.org")
-                              ("4ggn3sfvg3gl6nngpbcgcalft8@group.calendar.google.com" . "~/Dropbox/orgfiles/sar.org"))))
+  (setq alert-default-style 'message)
+  (setq alert-user-configuration nil
+        alert-notifier-command "/opt/local/bin/terminal-notifier")
+  (add-to-list 'alert-user-configuration
+               '(((:category . "slack")) notifier nil))
+  )
+
+;;; *** org-gcal
+(use-package org-gcal
+  :ensure t)
 
 ;;; *** org-mime
 ;; http://kitchingroup.cheme.cmu.edu/blog/2016/10/29/Sending-html-emails-from-org-mode-with-org-mime/
@@ -829,7 +994,7 @@ sJoin string:")
   :bind ("<f8>" . helm-spotify))
 
 ;;; *** butler
-(use-package butler
+'(use-package butler
   :commands butler-status
   :ensure t
   :init
@@ -843,6 +1008,11 @@ sJoin string:")
     (advice-add 'generate-progress-string :around #'butler-handle-unknown-expected)
 
     (setq web-log-info nil)))
+
+;;; *** jenkins
+(use-package jenkins
+  :commands jenkins
+  :ensure t)
 
 ;;; *** ahg
 (use-package ahg
@@ -893,6 +1063,11 @@ sJoin string:")
     (advice-add 'file-accessible-directory-p :around 'my-file-accessible-directory-p)
     ;; view specfic version when looking at log
     (define-key magit-commit-section-map "v" 'magit-find-file)
+
+    (magit-define-popup-option 'magit-log-popup ?b "Before" "--before")
+    (magit-define-popup-switch 'magit-log-popup
+      ?m "Omit merge commits" "--no-merges")
+    
     ))
 
 ;;; *** git-messenger
@@ -922,15 +1097,18 @@ sJoin string:")
 (use-package git-gutter-fringe
   :ensure t
   :diminish git-gutter-mode
-  :bind ("C-c g p" . git-gutter:popup-hunk)
+  :bind (("C-c g p" . git-gutter:popup-hunk)
+         ("C-c g s" . git-gutter:stage-hunk)
+         ("C-c g r" . git-gutter:revert-hunk))
+  :demand t
   :config
   (progn
     (set-face-foreground 'git-gutter-fr:modified "yellow")
     (custom-set-variables
-     '(git-gutter:update-interval 2))
+     '(git-gutter:update-interval 2)) 
     (setq git-gutter:handled-backends '(git hg))
-    
-    (global-git-gutter-mode +1)))
+    (global-git-gutter-mode +1)
+    ))
 
 ;;; *** git-timemachine
 (use-package git-timemachine
@@ -982,79 +1160,6 @@ sJoin string:")
 ;;; *** nodejs-repl
 (use-package nodejs-repl
   :commands nodejs-repl)
-
-;;; *** jabber
-
-;;playground for testing helm features
-'(helm :sources `((name . "the name")
-                 (candidates . ,(mapcar (lambda (x) x;(cons x (rot13 x))
-                                          ) '("a" "b" "c" "d")))
-                 (real-to-display . rot13)
-                 (candidate-transformer (lambda (list) (mapcar 'rot13 list)))
-                 ))
-
-
-
-(use-package jabber
-  :ensure t
-  :commands jabber-connect-all
-  :bind-keymap* ("C-c C-j" . jabber-global-keymap)
-  :defer 5
-  :config
-  (progn
-    ;(setq starttls-extra-arguments (list "--insecure" ))
-
-    (defun switch-to-active-jid-or-newspapers-group ()
-      (interactive)
-      (jabber-activity-switch-to
-       (car
-        (append jabber-activity-jids (list "newspapers@conference.iarchives.com")))))
-    
-    (defun switch-to-newspapers-group ()
-      (interactive)
-      (pop-to-buffer "*-jabber-groupchat-newspapers@conference.iarchives.com-*"))
-
-    (key-chord-define-global "jj" 'switch-to-active-jid-or-newspapers-group)
-    (bind-key "s-n" 'switch-to-newspapers-group)
-    ;;(add-hook 'jabber-chat-mode-hook 'visual-line-mode)
-
-    ;; get backlog by pressing up past top
-    (defun previous-line-or-jabber-backlog ()
-      (interactive)
-      (condition-case nil (previous-line)
-        (error
-         (message "Loading jabber history" )
-         (jabber-chat-display-more-backlog 1))))
-    (bind-key "<up>" 'previous-line-or-jabber-backlog jabber-chat-mode-map)
-    (bind-key "C-p" 'previous-line-or-jabber-backlog jabber-chat-mode-map)
-
-    ;; helmize it
-    (defun helm-jabber-chat-source (name face filter)
-      `((name . ,name)
-        (candidates . ,(remove-if-not filter (jabber-concat-rosters)))
-        (real-to-display . (lambda (x) (propertize (or (get x 'name) (symbol-name x)) 'face ',face)))
-        (action . (lambda (x)
-                    (jabber-chat-with
-                     (jabber-read-account)
-                     (symbol-name x))))))
-    
-    (defun helm-jabber-chat-with ()
-      (interactive)
-      (unless jabber-connections
-        (jabber-connect-all)
-        (sit-for 2))
-      (helm :sources (list (helm-jabber-chat-source "Jabber Online Contacts"
-                                                    'jabber-roster-user-online (lambda (x) (get x 'connected)))
-                           (helm-jabber-chat-source "Jabber Offline Contacts"
-                                                    'jabber-roster-user-offline (lambda (x) (not (get x 'connected)))))))
-    (bind-key "C-j" 'helm-jabber-chat-with jabber-global-keymap)
-    
-    ;; get jabber and dired-x to coexist
-    (bind-key "C-x C-j" 'dired-jump)
-    (bind-key "C-x 4 C-j" 'dired-jump-other-window)
-    (bind-key* "C-c C-j" jabber-global-keymap)
-    '(jabber-connect-all)))
-
 
 ;;; *** play-sound
 (unless (and (fboundp 'play-sound-internal)
@@ -1205,13 +1310,42 @@ strings and will be called on completion."
 
 ;;; ** Getting Around (search, navigation)
 
-;;; ** Elisp navigation
+;;; *** Elisp navigation
 ;; from http://emacsredux.com/blog/2014/06/18/quickly-find-emacs-lisp-sources/
 (use-package elisp-slime-nav
   :config
   (progn
    (dolist (hook '(emacs-lisp-mode-hook ielm-mode-hook))
      (add-hook hook 'elisp-slime-nav-mode))))
+
+;;; *** beacon
+(use-package beacon
+  :ensure t
+  :config
+  (progn
+    (setq beacon-blink-when-window-scrolls nil)
+    (beacon-mode 1))
+  :diminish)
+
+;;; *** spaceline
+(use-package spaceline
+  :ensure t
+  :config
+  (progn
+    (require 'spaceline-config)
+    (setq powerline-default-separator 'roundstub)
+    (spaceline-emacs-theme)
+    (spaceline-toggle-selection-info-off)
+    (spaceline-toggle-buffer-size-off)
+    (spaceline-toggle-mu4e-alert-segment-on)
+    ;(spaceline-toggle-erc-track-on)
+
+    (spaceline-define-segment buffer-id
+      "Name of buffer."
+      (s-trim (powerline-buffer-id 'mode-line-buffer-id))
+      :priority -1000)
+    
+    ))
 
 ;;; *** avy
 (use-package avy
@@ -1225,15 +1359,17 @@ strings and will be called on completion."
   :ensure t
   :commands projectile-global-mode
   :init (projectile-global-mode)
+  :diminish projectile-mode
   :config
   (progn
     (setq projectile-completion-system 'helm)
-    (diminish 'projectile-mode)
     (defun projectile-project-root-advice (orig-func &rest args)
       (if (file-remote-p default-directory)
           nil ;; no projectile stuff in remote directores.  
         (apply orig-func args)))
-    (advice-add 'projectile-project-root :around 'projectile-project-root-advice)))
+    (advice-add 'projectile-project-root :around 'projectile-project-root-advice)
+    (projectile-cleanup-known-projects))
+  )
 
 ;;; *** helm-projectile
 (use-package helm-projectile
@@ -1344,11 +1480,12 @@ strings and will be called on completion."
 
 ;;; *** swiper
 (use-package swiper
-  :bind (("C-S-s" . swiper-helm))
+
   ;; :bind (("C-s" . swiper-or-isearch-forward)
   ;;        ("C-r" . swiper-or-isearch-backward))
   :config
   (progn
+    (global-set-key [C-s-268632083] 'swiper-helm)
     (setq isearch-modes '(shell-mode term-mode Info-mode messages-buffer-mode pdf-view-mode log4j-mode))
     (setq ivy-display-style 'fancy)
     ;; old way (member major-mode isearch-modes)
@@ -1402,7 +1539,7 @@ strings and will be called on completion."
     (defun my-ffap-guesser (orig-func &rest args)
       (let* ((ffap-url-regexp nil)
              (retval (apply orig-func args)))
-        (message "retval is %s" retval)
+        ;(message "retval is %s" retval)
         (cond
          ((or
            (member retval '("/" "/**" "//"))
@@ -1509,6 +1646,7 @@ strings and will be called on completion."
           ("s-g" . helm-google-suggest))
   :chords (("hh" . helm-resume))
   :commands (helm-resume)
+  :diminish helm-mode
   :config (progn
             (helm-mode)
             (custom-set-variables
@@ -1519,7 +1657,6 @@ strings and will be called on completion."
             (bind-key "M-r" 'helm-comint-input-ring shell-mode-map )
             (advice-add 'helm-comint-input-ring :before 'comint-kill-input)
             
-            (diminish 'helm-mode)
             (defalias 'man 'helm-man-woman)
             (helm-autoresize-mode t)
             ;; helm-mini -- highlight @ words in buffer when they are selected
@@ -1573,6 +1710,11 @@ strings and will be called on completion."
 
 ;;; ** Major Modes
 
+;;; *** go ***
+(use-package go-mode
+  :mode "\\.go$"
+  :ensure t)
+
 ;;; *** typesscript-mode
 (use-package typescript-mode
   :mode "\\.ts$"
@@ -1592,7 +1734,44 @@ strings and will be called on completion."
   :mode "\\.py$"
   :config
   (progn
-    (setq py-jython-command "/usr/local/bin/jython")))
+
+    (setq py-jython-command "/usr/local/bin/jython")
+
+    (defun find-and-fix-camel-case ()
+      (interactive)
+      (while (find-camel-case)
+        (if (and (not (nth 3 (syntax-ppss))) (y-or-n-p "Fix?" ))
+            (camel-to-underscore)
+          (forward-word))
+        
+        )
+      )
+
+    (defun find-camel-case ()
+      (interactive)
+      (let ((case-fold-search))
+        (re-search-forward "\\<[a-z0-9]+[A-Z][a-z]+" )
+        (backward-word)
+        t
+        )
+      )
+
+    (defun camel-to-underscore ()
+      (interactive)
+      (let ((start (point)) (end))
+        (forward-sexp)
+        (setq end (point))
+        (goto-char start)
+        (syntax-subword-right 1)
+        (while (< (point) end)
+          (insert "_")
+          (syntax-subword-downcase 1)
+          )
+        )
+      )
+
+    
+    ))
 
 ;;; *** dockerfile-mode
 (use-package dockerfile-mode
@@ -2015,10 +2194,10 @@ strings and will be called on completion."
     
     (use-package paredit
       :ensure t
+      :diminish paredit-mode
       :config
       (progn
-        (add-hook 'emacs-lisp-mode-hook 'paredit-mode)
-        (diminish 'paredit-mode))
+        (add-hook 'emacs-lisp-mode-hook 'paredit-mode))
       ;; making paredit work with delete-selection-mode
       ;; (from http://whattheemacsd.com/setup-paredit.el-03.html )
       ;; (put 'paredit-forward-delete 'delete-selection 'supersede)
@@ -2029,10 +2208,11 @@ strings and will be called on completion."
       ;; (put 'paredit-newline 'delete-selection t)
       )
     (use-package eldoc
+      :diminish eldoc-mode
       :config
       (progn
         (add-hook 'emacs-lisp-mode-hook 'eldoc-mode)
-        (diminish 'eldoc-mode)))))
+        ))))
 
 ;;; *** nxml-mode
 (use-package nxml-mode
@@ -2093,9 +2273,9 @@ of the line.  This expects the xmltok-* variables to be set up as by
 (use-package auto-complete
   :ensure t
   :defer 5
+  :diminish auto-complete-mode
   :config (progn
-            (ac-config-default)
-            (diminish 'auto-complete-mode)))
+            (ac-config-default)))
 
 ;;; *** apples-mode
 (use-package apples-mode
@@ -2117,6 +2297,31 @@ of the line.  This expects the xmltok-* variables to be set up as by
 (use-package markdown-mode
   :mode "\\.md$"
   :ensure t)
+
+;;; *** sage-shell-mode
+(use-package sage-shell-mode
+  :ensure t
+  :config
+  (progn
+    ;; Run SageMath by M-x run-sage instead of M-x sage-shell:run-sage
+    (sage-shell:define-alias)
+
+    ;; Turn on eldoc-mode in Sage terminal and in Sage source files
+    (add-hook 'sage-shell-mode-hook #'eldoc-mode)
+    (add-hook 'sage-shell:sage-mode-hook #'eldoc-mode)
+
+    (setq sage-shell:use-prompt-toolkit t)
+    )
+  )
+
+(use-package ob-sagemath
+  :ensure t
+  :config
+  (progn
+    (setq org-babel-default-header-args:sage '((:session . t)
+                                               (:results . "output")))
+    )
+  )
 
 ;;; *** conf-mode
 (use-package conf-mode
@@ -2169,9 +2374,9 @@ of the line.  This expects the xmltok-* variables to be set up as by
   :ensure t
   :config
   (progn
-    (purpose-mode 1)
-    (add-to-list 'purpose-user-mode-purposes '(jabber-chat-mode . chat))
-    (purpose-compile-user-configuration) ; activates changes
+    ;(purpose-mode 1)
+    ;(add-to-list 'purpose-user-mode-purposes '(jabber-chat-mode . chat))
+    ;(purpose-compile-user-configuration) ; activates changes
     ))
 ;;; *** windmove
 (use-package windmove
@@ -2204,6 +2409,9 @@ of the line.  This expects the xmltok-* variables to be set up as by
     (interactive)
     (kill-this-buffer)
     (delete-window))
+
+  ;; See https://emacs.stackexchange.com/questions/598/how-do-i-prevent-extremely-long-lines-making-emacs-slow
+  (setq bidi-display-reordering nil)
   
   (put 'erase-buffer 'disabled nil)
   (setq case-fold-search t)
@@ -2333,12 +2541,6 @@ fi" nil insert-directory-program)
                     (concat " (" (car bufs) ")?") 
                   "?"))
        )
-
-      (add-hook 'dired-mode-hook
-                (lambda()
-                  (define-key dired-mode-map (kbd "C-o") 'dired-view-current)     ; was dired-display-file
-                  (define-key dired-mode-map (kbd "n")   'dired-view-next)           ; was dired-next-line
-                  (define-key dired-mode-map (kbd "p")   'dired-view-previous)))
 
       ;; from http://stackoverflow.com/questions/19907939/how-can-one-quickly-browse-through-lots-of-files-in-emacs
       ;; little modification to dired-mode that let's you browse through lots of files
@@ -2515,7 +2717,17 @@ Interactively, reads the register using `register-read-with-preview'."
   (bind-key "C-x 6" 'toggle-window-split)
   (defun other-window-1 (&optional size)
     (when (called-interactively-p 'any)
-      (other-window 1)))
+      (other-window 1)
+      ;; switch the new window to the next thing in the buffer stack
+      (let ((next-buffer
+             (cl-find-if-not
+              (lambda (buf)
+                (or (get-buffer-window buf) ; already visible?
+                    (= ? (elt (buffer-name buf) 0)))) ; internal?
+              (buffer-list))))
+        (when next-buffer
+          (switch-to-buffer next-buffer)))))
+  
   (advice-add 'split-window-below :after #'other-window-1 )
   (advice-add 'split-window-right :after #'other-window-1 )
   (setq scroll-error-top-bottom t)
@@ -2592,18 +2804,20 @@ Interactively, reads the register using `register-read-with-preview'."
 
     (add-to-list 'jka-compr-mode-alist-additions '("\\.xrif\\'" . nxml-mode))
     (jka-compr-update)))
+
 ;;; *** buffer-flip
 (use-package buffer-flip
+  :chords (("u8" . buffer-flip))
+  :bind  (:map buffer-flip-map
+               ( "8" .   buffer-flip-forward) 
+               ( "*" .   buffer-flip-backward) 
+               ( "C-g" . buffer-flip-abort))
   :config
   (progn
-    (buffer-flip-mode 1)
-    ;; a common operation in my work flow is to switch to the other window buffer and show the next buffer in the stack.
-    (defun buffer-flip-other-window ()
-      (interactive)
-      (other-window 1)
-      (buffer-flip))
-    (key-chord-define-global "U*" 'buffer-flip-other-window)
-    ))
+    (setq buffer-flip-skip-patterns
+          '("^\\*helm\\b"
+            "^\\*swiper\\*$"))))
+
 ;;; *** ns-win (drag n drop)
 (use-package ns-win
   :config
@@ -2633,18 +2847,90 @@ Interactively, reads the register using `register-read-with-preview'."
    ( "C-c C-x C-i" . org-clock-in)
    ( "C-c C-x C-o" . org-clock-out)
    ( "C-c C-x C-j" . org-clock-goto)
-   ( "s-r" . helm-org-in-buffer-headings)
+                                        ;( "s-r" . helm-org-in-buffer-headings)
    ;; these come from mac shortcut keys (automator services)
    ;;( "s-O" . org-capture)
    ( "<C-f9>" . org-capture-mail)
    ( "<C-f10>" . org-capture-chrome)
+   :map
+   org-mode-map
+   ( "C-M-I" . org-table-project) 
    )
   :ensure t
   :config
   (progn
 
-;;    (add-hook 'org-agenda-mode-hook (lambda () (org-gcal-sync) ))
-;;    (add-hook 'org-capture-after-finalize-hook (lambda () (org-gcal-sync) ))
+    ;;
+    ;; export inline images
+    ;;
+
+    (defun org-html--svg-image (source attributes info)
+      "Return \"object\" embedding svg file SOURCE with given ATTRIBUTES.
+INFO is a plist used as a communication channel.
+
+The special attribute \"fallback\" can be used to specify a
+fallback image file to use if the object embedding is not
+supported.  CSS class \"org-svg\" is assigned as the class of the
+object unless a different class is specified with an attribute."
+      (let ((fallback (plist-get attributes :fallback))
+            (attrs (org-html--make-attribute-string
+                    (org-combine-plists
+                     ;; Remove fallback attribute, which is not meant to
+                     ;; appear directly in the attributes string, and
+                     ;; provide a default class if none is set.
+                     '(:class "org-svg") attributes '(:fallback nil)))))
+        (format "%s"
+                (replace-regexp-in-string "^.*\\(\n.*\\)*<svg " "<svg "
+                                          (org-file-contents source)))))
+    
+    (defun org-html--format-image (source attributes info)
+      "Return \"img\" tag with given SOURCE and ATTRIBUTES.
+SOURCE is a string specifying the location of the image.
+ATTRIBUTES is a plist, as returned by
+`org-export-read-attribute'.  INFO is a plist used as
+a communication channel."
+      (if (string= "svg" (file-name-extension source))
+          (org-html--svg-image source attributes info)
+        (org-html-close-tag
+         "img"
+         (org-html--make-attribute-string
+          (org-combine-plists
+           (list :src (base64-src source) :foo "bar"
+                 :alt (if (string-match-p "^ltxpng/" source)
+                          (org-html-encode-plain-text
+                           (org-find-text-property-in-string 'org-latex-src source))
+                        (file-name-nondirectory source)))
+           attributes))
+         info)))
+
+    (defun base64-src (file)
+      (concat "data:image/" (file-name-extension file) ";base64,"
+              (with-temp-buffer
+                (insert-file file)
+                (base64-encode-region (point-min) (point-max) t)
+                (buffer-substring (point-min) (point-max)))))
+    
+
+    ;;    (add-hook 'org-agenda-mode-hook (lambda () (org-gcal-sync) ))
+    ;;    (add-hook 'org-capture-after-finalize-hook (lambda () (org-gcal-sync) ))
+    
+    (defun org-table-project (increase)
+      (interactive (list (let ((val (string-to-number
+                                     (org-table-get-field (org-table-current-column))))
+                               (prev-val (string-to-number
+                                          (save-excursion (org-table-get-field (- (org-table-current-column) 1))))))
+                           (if (and (> val 0) (> prev-val 0))
+                               (number-to-string (- val prev-val))
+                             (read-from-minibuffer
+                              "Increase: "
+                              )
+                             ))
+                         ))
+      (let ((n (string-to-number (org-table-get-field))))
+        (org-table-next-field)
+        (org-table-blank-field)
+        (insert (number-to-string (+ (string-to-number increase) n)))
+        (org-table-align)))
     
     ;; org-gnuplot fixup.  Resetting to aqua terminal at the beginning of each script, since writing to a file in #+PLOT doesn't reset the terminal back to aqua automatically
     (defun gnuplot-script-around (orig-func &rest args)
@@ -2704,6 +2990,7 @@ set output
        (perl . t)
        (java . t)
        (js . t)
+       (gnuplot .t)
        (restclient . t)))
 
     (patch-function
@@ -2716,6 +3003,33 @@ set output
                       (org-babel-process-file-name in-file)
                       (org-babel-process-file-name out-file)))))
       (with-temp-file in-file")
+
+    ;; from https://gist.github.com/wallyqs/724e61e9d070b1d4e95b
+    '(patch-function 'org-babel-eval
+                    "(progn
+	    (with-current-buffer err-buff
+	      (org-babel-eval-error-notify exit-code (buffer-string)))
+	    (save-excursion
+	      (when (get-buffer org-babel-error-buffer-name)
+		(with-current-buffer org-babel-error-buffer-name
+		  (unless (derived-mode-p 'compilation-mode)
+		    (compilation-mode))
+		  ;; Compilation-mode enforces read-only, but Babel expects the buffer modifiable.
+		  (setq buffer-read-only nil))))
+	    nil)"
+                    ;; W: force to return output even if there was an error
+	                '(progn
+	                  (concat (buffer-string)
+		                      (with-current-buffer err-buff
+		                        ;; (org-babel-eval-error-notify exit-code (buffer-string)
+		                        (buffer-string)
+		                        )))
+                    )
+
+    ;; putting it back to normal
+    (patch-function 'org-babel-eval
+                   
+                    )
 
     (defun redisplay-images (result &optional result-params info hash indent lang)
       (org-redisplay-inline-images))
@@ -2745,60 +3059,60 @@ set output
 
 
      org-agenda-custom-commands
-          '(
-            ("p" "Packing list"
-             (
-              (tags-todo "russ"
-                         ((org-agenda-prefix-format "[ ]")
-                          (org-agenda-sorting-strategy '(tag-up priority-down))
-                          (org-agenda-todo-keyword-format "")
-                          (org-agenda-overriding-header "Russell Packing List\n------------------\n")
-                          ))
-              (tags-todo "molli"
-                         ((org-agenda-prefix-format "[ ]")
-                          (org-agenda-sorting-strategy '(tag-up priority-down))
-                          (org-agenda-todo-keyword-format "")
-                          (org-agenda-overriding-header "Molli Packing List\n------------------\n")
-                          ))
-              (tags-todo "tyler"
-                         ((org-agenda-prefix-format "[ ]")
-                          (org-agenda-sorting-strategy '(tag-up priority-down))
-                          (org-agenda-todo-keyword-format "")
-                          (org-agenda-overriding-header "Tyler Packing List\n------------------\n")
-                          ))
-              (tags-todo "casey"
-                         ((org-agenda-prefix-format "[ ]")
-                          (org-agenda-sorting-strategy '(tag-up priority-down))
-                          (org-agenda-todo-keyword-format "")
-                          (org-agenda-overriding-header "Casey Packing List\n------------------\n")
-                          ))
-              (tags-todo "aly"
-                         ((org-agenda-prefix-format "[ ]")
-                          (org-agenda-sorting-strategy '(tag-up priority-down))
-                          (org-agenda-todo-keyword-format "")
-                          (org-agenda-overriding-header "Alyson Packing List\n------------------\n")
-                          ))
-              (tags-todo "lydia"
-                         ((org-agenda-prefix-format "[ ]")
-                          (org-agenda-sorting-strategy '(tag-up priority-down))
-                          (org-agenda-todo-keyword-format "")
-                          (org-agenda-overriding-header "Lydia Packing List\n------------------\n")
-                          ))
+     '(
+       ("p" "Packing list"
+        (
+         (tags-todo "russ"
+                    ((org-agenda-prefix-format "[ ]")
+                     (org-agenda-sorting-strategy '(tag-up priority-down))
+                     (org-agenda-todo-keyword-format "")
+                     (org-agenda-overriding-header "Russell Packing List\n------------------\n")
+                     ))
+         (tags-todo "molli"
+                    ((org-agenda-prefix-format "[ ]")
+                     (org-agenda-sorting-strategy '(tag-up priority-down))
+                     (org-agenda-todo-keyword-format "")
+                     (org-agenda-overriding-header "Molli Packing List\n------------------\n")
+                     ))
+         (tags-todo "tyler"
+                    ((org-agenda-prefix-format "[ ]")
+                     (org-agenda-sorting-strategy '(tag-up priority-down))
+                     (org-agenda-todo-keyword-format "")
+                     (org-agenda-overriding-header "Tyler Packing List\n------------------\n")
+                     ))
+         (tags-todo "casey"
+                    ((org-agenda-prefix-format "[ ]")
+                     (org-agenda-sorting-strategy '(tag-up priority-down))
+                     (org-agenda-todo-keyword-format "")
+                     (org-agenda-overriding-header "Casey Packing List\n------------------\n")
+                     ))
+         (tags-todo "aly"
+                    ((org-agenda-prefix-format "[ ]")
+                     (org-agenda-sorting-strategy '(tag-up priority-down))
+                     (org-agenda-todo-keyword-format "")
+                     (org-agenda-overriding-header "Alyson Packing List\n------------------\n")
+                     ))
+         (tags-todo "lydia"
+                    ((org-agenda-prefix-format "[ ]")
+                     (org-agenda-sorting-strategy '(tag-up priority-down))
+                     (org-agenda-todo-keyword-format "")
+                     (org-agenda-overriding-header "Lydia Packing List\n------------------\n")
+                     ))
 
-              )
-             ((org-agenda-with-colors nil)
-              (org-agenda-compact-blocks t)
-              (org-agenda-remove-tags t)
-              (ps-number-of-columns 2)
-              (ps-landscape-mode t))
-             ("~/agenda.ps"))
-            ;;other commands go here
-            ("u" "Agenda and unscheduled TODOs"
-             ((agenda "")
-              (tags-todo "-exclude"
-                         ((org-agenda-skip-function
-                           '(org-agenda-skip-entry-if 'deadline 'scheduled 'timestamp))
-                          (org-agenda-overriding-header "Unscheduled Todos")))))))
+         )
+        ((org-agenda-with-colors nil)
+         (org-agenda-compact-blocks t)
+         (org-agenda-remove-tags t)
+         (ps-number-of-columns 2)
+         (ps-landscape-mode t))
+        ("~/agenda.ps"))
+       ;;other commands go here
+       ("u" "Agenda and unscheduled TODOs"
+        ((agenda "")
+         (tags-todo "-exclude"
+                    ((org-agenda-skip-function
+                      '(org-agenda-skip-entry-if 'deadline 'scheduled 'timestamp))
+                     (org-agenda-overriding-header "Unscheduled Todos")))))))
 
     ;; Set to the location of your Org files on your local system
     (setq org-directory "~/org")
@@ -2917,17 +3231,37 @@ applied."
       :ensure t
       :commands org-mac-grab-link
       :config (message "org-mac-link loaded"))
+
+    (use-package org-inlinetask
+      :config
+      (progn
+        (defun org-html-format-inlinetask-default-function
+            (todo todo-type priority text tags contents info)
+          "Default format function for a inlinetasks.
+See `org-html-format-inlinetask-function' for details."
+          (format "<div class=\"inlinetask\">\n<b>%s</b>%s\n%s</div>"
+                  (org-html-format-headline-default-function
+                   todo todo-type priority text tags info)
+                  (org-html-close-tag "br" nil info)
+                  (or contents ""))) ;; this patch is here because when contents is nil it was printing nil
+        )
+      )
     ))
 
-;; don't like this.
-'(use-package org-ac
-  :ensure
-  :config
-  (progn
-    (org-ac/config-default)
-    ;(add-hook 'org-mode-hook 'auto-complete-mode)
-    (remove-hook 'org-mode-hook 'auto-complete-mode))
+(use-package org-alert
+  :ensure t)
+
+(use-package ox-twbs
+  :ensure t
   )
+
+(use-package org-bullets
+  :ensure t
+  :init
+  (setq org-bullets-bullet-list
+        '("⚫" "○" "•" "◦" "◎" "◉" ))
+  :config
+  (add-hook 'org-mode-hook (lambda () (org-bullets-mode 1))))
 
 (use-package calfw
   :ensure 
@@ -2981,7 +3315,11 @@ applied."
   :defer 60
   :config
   (progn
-    (setq midnight-hook (quote (clean-buffer-list org-mobile-push xkcd)))
+    (setq midnight-hook '(clean-buffer-list
+                          org-mobile-push
+                          org-gcal-sync
+                          xkcd
+                          ))
     (midnight-delay-set 'midnight-delay 43200)))
 
 ;;; ** exec-path-from-shell
@@ -3083,6 +3421,34 @@ Requires ImageMagick installation"
 
     ))
 
+;;; ** diff-mode
+(use-package diff-mode
+  :bind
+  (:map
+   diff-mode-map
+   ("C-c M-w" . diff-copy-+))
+  :config
+  (progn
+    "Lets you copy sections that begin with + (added hunks)"
+    (defun diff-copy-+ ()
+     (interactive)
+     (let (start end)
+       (beginning-of-line)
+       (unless (looking-at "\\+")
+         (user-error "No + here"))
+       (while (looking-at "\\+")
+         (setq start (point))
+         (previous-logical-line))
+       (next-logical-line)
+       (while (looking-at "\\+")
+         (next-logical-line)
+         (setq end (point)))
+       (kill-new (replace-regexp-in-string
+                  "^\\+" ""
+                  (buffer-substring-no-properties start end)))
+       (message "section copied")
+       ))))
+
 ;;; ** try-package
 (use-package try :ensure t )
 
@@ -3091,7 +3457,24 @@ Requires ImageMagick installation"
   :ensure t
   :diminish which-key-mode
   :config (which-key-mode))
-  
+
+;;; ** mu4e-alert
+(use-package mu4e-alert
+  :ensure t
+  :config
+  (progn (setq mu4e-alert-interesting-mail-query "flag:unread AND maildir:/inbox")
+         (mu4e-alert-enable-mode-line-display)
+         (patch-function 'mu4e-alert-enable-mode-line-display
+                         "'mu4e-msg-changed-hook"
+                         (if (boundp 'mu4e-message-changed-hook)
+                             'mu4e-message-changed-hook
+                           'mu4e-msg-changed-hook))
+         (patch-function 'mu4e-alert-disable-mode-line-display
+                         "'mu4e-msg-changed-hook"
+                         (if (boundp 'mu4e-message-changed-hook)
+                             'mu4e-message-changed-hook
+                           'mu4e-msg-changed-hook))
+         ))
 ;;; ** Company-Specific Packages
 ;;; *** jenkins-build
 (use-package jenkins-build
@@ -3120,6 +3503,19 @@ Requires ImageMagick installation"
   :config (mark-state-mode))
 
 ;;; * Misc Functions
+
+;; Fold at indentation
+;; from https://stackoverflow.com/questions/1587972/how-to-display-indentation-guides-in-emacs/4459159#4459159
+(defun aj-toggle-fold ()
+  "Toggle fold all lines larger than indentation on current line"
+  (interactive)
+  (let ((col 1))
+    (save-excursion
+      (back-to-indentation)
+      (setq col (+ 1 (current-column)))
+      (set-selective-display
+       (if selective-display nil (or col 1))))))
+(global-set-key [(M C i)] 'aj-toggle-fold)
 
 ;; If call-process is called with an invalid value in
 ;; default-directory, such as when the buffer comes from
@@ -3193,35 +3589,7 @@ spaces.  Die Die Die."
      (buffer-list)))
    t))
 
-(defun random-cursor-movement ()
-  (interactive)
-  (save-excursion
-    (save-selected-window
-      (push-mark)
-      (while
-          (apply (lambda (operation maxtimes)
-                   (loop repeat (1+ (random maxtimes))
-                         always
-                         (let ((p (point)))
-                           (ignore-errors (apply operation nil))
-                           (sit-for (+ .1 (/ (log (abs (- p (point)))) 10))))))
-                 (case (random 13)
-                   (0 '(previous-line 10))
-                   (1 '(next-line 10 ))
-                   (2 '(forward-char 10 ))
-                   (3 '(backward-char 10 ))
-                   (4 '(forward-word 10 ))
-                   (5 '(backward-word 10 ))
-                   (6 '(beginning-of-line 1))
-                   (7 '(end-of-line 1))
-                   (8 '(scroll-up-command 4))
-                   (9 '(scroll-down-command 4))
-                   (10 '(forward-sexp 1))
-                   (11 '(backward-sexp 1))
-                   (12 '(switch-to-random-buffer 1))
-                   (t '(ignore 1))
-                   ))
-        ))))
+
 
 (defun mandelbrot ()
   (interactive)
@@ -3356,11 +3724,7 @@ is a lot more readable without the ^M's getting in the way."
 
 (require 'cl-lib)
 
-(defvar punctuation-marks '(","
-                            "."
-                            "'"
-                            "&"
-                            "\"")
+(defvar punctuation-marks '()
   "List of Punctuation Marks that you want to count.")
 
 (defun count-raw-word-list (raw-word-list)
@@ -3444,12 +3808,15 @@ is a lot more readable without the ^M's getting in the way."
     
     ))
 
+(define-key key-translation-map (kbd "<S-mouse-1>") (kbd "<mouse-2>"))
+
 ;;; * Customization Variables
 (load custom-file)
 
 ;;; * Load Theme
-;;(load-theme 'tron t)
+;;(load-theme 'atari t)
 (load-theme 'default-black t)
+
 
 ;;; * Local Variables
 ;; Local Variables:
