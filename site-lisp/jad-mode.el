@@ -62,7 +62,7 @@
 
 ;;; Code:
 
-(defvar jdc-command  "/usr/bin/jad"
+(defvar jdc-command  "/opt/local/bin/jad"
   "The name of the decompiler if it's on your path, otherwise
 a full qualified path to it.")
 
@@ -75,12 +75,11 @@ a full qualified path to it.")
 (defun jdc-buffer ()
   "Construct the command for decompiling a class file, call the resulting
 command and load the decompiled file."
-  
   (let*
       (
        (exists (file-exists-p (buffer-file-name)))
        (jdc-classfile (if exists
-                          (file-name-nondirectory (buffer-file-name))
+                          (buffer-file-name)
                         (let ((tempfile (concat "/tmp/" (file-name-nondirectory (buffer-file-name))))
                               (coding-system-for-write 'raw-text))
                           (write-region nil nil tempfile)
