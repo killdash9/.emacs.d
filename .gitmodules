@@ -16,3 +16,6 @@
 [submodule "site-lisp/thread-dump.el"]
 	path = site-lisp/thread-dump.el
 	url = https://github.com/killdash9/thread-dump.el.git
+[submodule "site-lisp/better-shell"]
+	path = site-lisp/better-shell
+	url = https://github.com/killdash9/better-shell.git
