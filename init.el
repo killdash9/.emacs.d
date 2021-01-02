@@ -3,8 +3,9 @@
 
 ;;; * Package Framework
 (setq package-archives '(("gnu"       . "http://elpa.gnu.org/packages/")
-                         ("marmalade" . "http://marmalade-repo.org/packages/")
-                         ("melpa"     . "http://melpa.org/packages/")))
+                         ("org"       . "https://orgmode.org/elpa/")
+                         ("melpa"     . "http://melpa.org/packages/")
+                         ("marmalade" . "http://marmalade-repo.org/packages/")))
 
 (package-initialize)
 (setq package-enable-at-startup nil) ;; keep it from re-loading the packages after the init file has run
@@ -13,7 +14,7 @@
 ;; adding this to the load path after package-initialize causes
 ;; site-lisp paths to override elpa paths.
 (add-to-list 'load-path "~/.emacs.d/site-lisp/")
-(add-to-list 'load-path "/usr/local/share/emacs/site-lisp/mu4e")
+;; (add-to-list 'load-path "/usr/local/share/emacs/site-lisp/mu4e")
 
 (defun s-trim-right (s)
   "Remove whitespace at the end of S."
@@ -30,14 +31,21 @@
   (package-refresh-contents)
   (package-install 'use-package))
 
+(setq use-package-compute-statistics t)
+
 (use-package use-package-chords
-  :ensure t
-  :config (key-chord-mode 1))
+  :ensure t)
 
 (use-package patch-function)
 
 ;;; * Secrets file
 (and (file-exists-p "~/Dropbox/.emacs-secrets.el" ) (load "~/Dropbox/.emacs-secrets.el"))
+
+;;; * exec-path-from-shell -- load this first
+(use-package exec-path-from-shell
+  :ensure t
+  :init (exec-path-from-shell-initialize) ; set the right PATH variable
+  )
 
 ;(setq use-package-verbose t)
 
@@ -97,7 +105,8 @@
         (setq zone-programs [random-edit])
         ))
     (setq zone-programs (remove-if (lambda (x) (member x '(zone-pgm-jitter zone-pgm-dissolve))) zone-programs))
-    (zone-when-idle 3600)))
+    ;(zone-when-idle 3600)
+    ))
 
 ;;; *** fns.c
 (progn
@@ -336,9 +345,17 @@
          ("M-SPC" . cycle-spacing)
          ("M-s-<down>" . duplicate-line-down)
          ("M-s-<up>" . duplicate-line-up)
-         ("s-!" . shell-command-on-buffer))
+         ("s-!" . shell-command-on-buffer)
+         ("C-o" . killdash9/open-line))
   :config
   (progn
+
+    (defun killdash9/open-line ()
+      "Move to the beginning of the line, then open a new line"
+      (interactive)
+      (beginning-of-line)
+      (open-line 1))
+
     (setq save-interprogram-paste-before-kill t)
     (define-key key-translation-map (kbd "<C-backspace>") (kbd "<deletechar>"))
     (defadvice mark-whole-buffer (after mark-whole-buffer-activate-mark activate)
@@ -404,7 +421,7 @@ sJoin string:")
       (kill-line)
       (yank)
       (open-line 1)
-      (next-line 1)
+      (forward-line 1)
       (yank)
       (move-beginning-of-line 1)
       )
@@ -427,8 +444,12 @@ sJoin string:")
 
     (advice-add 'set-mark-command :around 'cycle-active-mark)
     (advice-remove 'set-mark-command 'cycle-active-mark)
+    (advice-add 'other-window :after 'clear-transient-mark-mode)
 
-    ;; Press C-u C-u C-SPC to unpop.  
+    (defun clear-transient-mark-mode (&rest args)
+      (transient-mark-mode 0))
+
+    ;; Press C-u C-u C-SPC to unpop.
     (defun unpop-to-mark-command ()
       "Unpop off mark ring. Does nothing if mark ring is empty."
       (when mark-ring
@@ -501,6 +522,7 @@ sJoin string:")
 
 ;;; *** wgrep
 (use-package wgrep
+  :ensure t
   :config
   (progn
     ;; disabling grep's read only mode enters wgrep mode.  Mirrors dired.
@@ -525,15 +547,8 @@ sJoin string:")
 (use-package expand-region
   :ensure t
   :bind* ("M-e" . er/expand-region)
-  :config (progn
-            (add-hook 'java-mode-hook 'er/add-cc-mode-expansions)
-            ;; prevent this function from stacking 'only in transient-mark-mode
-            (patch-function
-             'er--prepare-expanding
-             "(setq transient-mark-mode (cons 'only transient-mark-mode))"
-             '(unless (eq (car-safe transient-mark-mode) 'only)
-                  (setq transient-mark-mode (cons 'only transient-mark-mode))))
-            ))
+  :config
+  (add-hook 'java-mode-hook 'er/add-cc-mode-expansions))
 
 ;;; *** editfns.c
 (progn                                  ;editfns.c
@@ -591,6 +606,11 @@ sJoin string:")
 (use-package flycheck
   :ensure t
   :config (global-flycheck-mode))
+;;; *** flyspell
+(use-package flyspell
+  :config
+  (global-set-key (kbd "<mouse-3>") 'flyspell-correct-word)
+  )
 ;;; *** hide-lines
 (use-package hide-lines
   :ensure t)
@@ -653,6 +673,26 @@ sJoin string:")
      'tramp-sh-handle-start-file-process
      "(tramp-file-name-localname v)" "\"$PWD\"")
     ))
+
+(use-package docker-tramp
+  :ensure t
+  :config
+  (defun no-default-host-for-docker (orig-func method)
+    ;(message "method is %s" method)
+    (if (string-equal "docker" method)
+        (progn
+          '(message "%s"
+                            ;; This gets the wrong backtrace!
+                            (with-temp-buffer
+                              (let ((standard-output (current-buffer)))
+                                (backtrace)
+                                (buffer-string))))
+          nil )
+      (funcall orig-func method)))
+  
+  (advice-add 'tramp-parse-default-user-host :around 'no-default-host-for-docker )
+  )
+
 ;;; *** multi-term
 '(use-package multi-term
   :ensure t
@@ -673,7 +713,6 @@ sJoin string:")
      (lambda ()
        (define-key term-raw-map (kbd "C-y") 'term-paste)
        (define-key term-raw-map (kbd "s-v") 'term-paste)
-       (setq yas-dont-activate t)
        (define-key term-raw-map (kbd "M-/")
          (lambda ()
            (interactive)
@@ -692,7 +731,15 @@ sJoin string:")
           (delete-horizontal-space)))))
 
 
-  (setq term-prompt-regexp  "^[^#$%>\n]*[#$%>] *"))
+  (setq term-prompt-regexp  "^[^#$%>\n]*[#$%>] *")
+
+  (defun setup-ansi-term ()
+    (set (make-local-variable 'scroll-margin) 0)
+    (message "it is set up")
+    )
+  (add-hook 'term-mode-hook 'setup-ansi-term)
+
+  )
 
 ;;; *** comint
 (use-package comint
@@ -701,12 +748,12 @@ sJoin string:")
 
 
     (defun goto-end-of-buffer (&rest args)
-      (end-of-buffer))
+      (goto-char (point-max)))
     ;; move to end of buffer before calling comint-prevous-input
     (advice-add 'comint-previous-input :before #'goto-end-of-buffer )
     (advice-add 'comint-next-input :before #'goto-end-of-buffer )
 
-    ;; restart shell if it has exited.  
+    ;; restart shell if it has exited.
     (defun comint-send-input-reattach (&rest args)
       (when (and (eq major-mode 'shell-mode) (not (get-buffer-process (current-buffer))))
         (let ((dir default-directory))
@@ -715,21 +762,20 @@ sJoin string:")
           (shell (current-buffer)))))
 
     (advice-add 'comint-send-input :before 'comint-send-input-reattach )
+
+    ;; this next bit addresses a bug caused by gnuplot-mode, which
+    ;; incorrectly sets the global value of comint-process-echoes to
+    ;; t, causing shells created after that time to freeze up waiting
+    ;; for the shell to echo.
+    (defun comint-reset-variable ()
+      (setq-default comint-process-echoes nil))
+    (advice-add 'comint-mode :before 'comint-reset-variable )
     ))
 
 ;;; *** better-shell
 (use-package better-shell
   :bind* (("C-'" . better-shell-shell)
           ("C-;" . better-shell-remote-open)))
-
-(use-package ansi-term
-  :config
-  (defun setup-ansi-term ()
-    (set (make-local-variable 'scroll-margin) 0)
-    (message "it is set up")
-    )
-  (add-hook 'term-mode-hook 'setup-ansi-term)
-  )
 
 ;;; *** shell
 (use-package shell
@@ -740,8 +786,8 @@ sJoin string:")
     (defun shell-command-on-current-file (command)
       "run a command on the current file and revert the buffer"
       (interactive "sShell command: ")
-      (shell-command 
-       (concat command " " 
+      (shell-command
+       (concat command " "
                (shell-quote-argument (buffer-file-name))))
       ;(revert-buffer t t t)
       )
@@ -763,7 +809,7 @@ sJoin string:")
 
     (defun fix-ansi-color-codes ()
       (interactive)
-      (end-of-buffer)
+      (goto-char (point-max))
       (insert "echo -e \"\033[m\"")
       (comint-send-input nil t))
     
@@ -795,8 +841,12 @@ sJoin string:")
             (t (insert " "))))
 
     (define-key shell-mode-map " " 'shell-active-space)
-    (use-package mysql-shell)
     (add-hook 'shell-mode-hook 'dirtrack-mode )))
+
+;;; *** mysql-shell
+(use-package mysql-shell
+  :commands (sql-magic-space)
+  :bind (:map shell-mode-map ("s-l" . mysql-cycle-limit)))
 
 ;;; *** cssh
 (use-package cssh
@@ -810,6 +860,48 @@ sJoin string:")
 ;(bind-key "C-;" 'shell-remote-open)
 
 ;;; ** External System Integration
+
+(use-package gnuplot
+  :ensure t)
+
+;;; *** elfeed
+(use-package elfeed
+  :ensure t
+  :config
+
+  (defun elfeed-show-refresh--my-style ()
+    (interactive)
+    (elfeed-show-refresh--mail-style)
+    (let ((inhibit-read-only t)) (elfeed-inline-enclosure)))
+
+  (defun elfeed-inline-enclosure ()
+    "Inline the enclosures when they are images"
+    (goto-char (point-max))
+    (cl-loop for enclosure in (elfeed-entry-enclosures elfeed-show-entry)
+             do (when (string-prefix-p "image/" (cadr enclosure)) (elfeed-insert-link (concat "<img src='" (car enclosure) "' />")))
+             (insert "\n"))
+    (goto-char (point-min)))
+
+  (setq elfeed-show-refresh-function #'elfeed-show-refresh--my-style)
+  (defun elfeed-switch-to-entry-buffer (&rest args)
+    "This is so that the shr image rendering will have a current window to use a max for image size."
+    (switch-to-buffer "*elfeed-entry*"))
+  
+  (advice-add 'elfeed-show-entry :before #'elfeed-switch-to-entry-buffer)
+
+  (defun elfeed-show-visit-eww ()
+    "Visit the current entry in your browser using `browse-url'.
+If there is a prefix argument, visit the current entry in the
+browser defined by `browse-url-generic-program'."
+    (interactive)
+    (let ((link (elfeed-entry-link elfeed-show-entry)))
+      (when link
+        (message "Sent to eww: %s" link)
+        (eww-browse-url link))))
+
+  (define-key elfeed-show-mode-map  "e" 'elfeed-show-visit-eww)
+  
+  )
 
 ;;; *** slack
 (use-package slack
@@ -951,6 +1043,7 @@ sJoin string:")
 ;;; *** org-mime
 ;; http://kitchingroup.cheme.cmu.edu/blog/2016/10/29/Sending-html-emails-from-org-mode-with-org-mime/
 (use-package org-mime
+  :ensure t
   :config
   (progn
     (patch-function
@@ -1011,8 +1104,17 @@ sJoin string:")
 
 ;;; *** jenkins
 (use-package jenkins
-  :commands jenkins
-  :ensure t)
+  :commands jenkins jenkins-job-call-build
+  :ensure t
+  :config
+  (patch-function 'jenkins-job-details-screen
+                  "(plist-get (cdr it) :timestring)"
+                  "(plist-get (cdr it) :timestring)
+                            (if (equal (plist-get (cdr it) :building) :json-true) \"building...\" \"\")"
+                  "Job #%s, %s %s"
+                  "Job #%s, %s %s %s"
+                  )
+  )
 
 ;;; *** ahg
 (use-package ahg
@@ -1051,7 +1153,7 @@ sJoin string:")
   (progn
     (setq magit-diff-refine-hunk 'all)
     '(defalias 'vc-print-log 'magit-log-buffer-file )
-    (global-magit-file-buffer-mode 1)
+    (global-magit-file-mode 1)
 
     ;; fix for weird bug.  Sometimes, only when a file has been
     ;; opened, file-accessible-directory-p returns true for a file.
@@ -1062,7 +1164,7 @@ sJoin string:")
            (file-directory-p (car args))))
     (advice-add 'file-accessible-directory-p :around 'my-file-accessible-directory-p)
     ;; view specfic version when looking at log
-    (define-key magit-commit-section-map "v" 'magit-find-file)
+    (define-key magit-commit-section-map "O" 'magit-find-file)
 
     (magit-define-popup-option 'magit-log-popup ?b "Before" "--before")
     (magit-define-popup-switch 'magit-log-popup
@@ -1159,6 +1261,7 @@ sJoin string:")
 
 ;;; *** nodejs-repl
 (use-package nodejs-repl
+  :ensure t
   :commands nodejs-repl)
 
 ;;; *** play-sound
@@ -1166,137 +1269,9 @@ sJoin string:")
              (subrp (symbol-function 'play-sound-internal)))
   (use-package play-sound))
 
-;;; *** helm-gtags
-(use-package helm-gtags
-  :config
-  (progn
-    (define-key helm-gtags-mode-map (kbd "M-t") 'helm-gtags-find-tag)
-    (define-key helm-gtags-mode-map (kbd "M-r") 'helm-gtags-find-rtag)
-    (define-key helm-gtags-mode-map (kbd "M-s") 'helm-gtags-find-symbol)
-    (define-key helm-gtags-mode-map (kbd "M-g M-p") 'helm-gtags-parse-file)
-    (define-key helm-gtags-mode-map (kbd "C-c <") 'helm-gtags-previous-history)
-    (define-key helm-gtags-mode-map (kbd "C-c >") 'helm-gtags-next-history)
-    (define-key helm-gtags-mode-map (kbd "M-,") 'helm-gtags-pop-stack)))
-
-;;; *** emacs-eclim
-'(use-package eclim
-  :ensure emacs-eclim
-  :config
-  (progn
-
-    ;; Configuration
-    (global-eclim-mode)
-    (defun eclim-set-sole-autocomplete ()
-      (setq ac-sources '(ac-source-emacs-eclim)))
-    (add-hook 'java-mode-hook 'eclim-set-sole-autocomplete)
-    (custom-set-variables
-     '(eclim-eclipse-dirs '("/Applications/Eclipse.app/Contents/Eclipse/"))
-     '(eclim-executable "/Applications/Eclipse.app/Contents/Eclipse/eclim"))
-    (use-package ac-emacs-eclim-source)
-    (use-package eclimd
-      :config
-      (progn
-        (setq eclimd-default-workspace "/Users/rblack/Documents/workspace"
-              eclimd-wait-for-process nil))
-      )
-    (eclim-problems-show-errors)
-    (key-chord-define eclim-mode-map "DD" 'eclim-java-show-documentation-for-current-element)
-
-    ;; Patches
-    
-    ;; workaround for bug in files with # in their names.  Eclim
-    ;; doesn't like them because it prepends a file:/// and tries to
-    ;; parse as url, and # isn't a valid char in url.  Fix is to
-    ;; url-escape with %23
-    (defun eclim--escape-hash-filenames (orig-func &rest args)
-      (let ((last-was-f))
-        (mapcar
-         (lambda (arg)
-           (when last-was-f
-             (setq arg (replace-regexp-in-string "#" "%23" arg)))
-           (setq last-was-f (string-equal "-f" arg))
-           arg)
-         (apply orig-func args))))
-
-    (advice-add 'eclim--expand-args :around #'eclim--escape-hash-filenames)
-
-    (defun eclim--call-process-async (callback &rest args)
-      "Like `eclim--call-process', but the call is executed
-asynchronously. CALLBACK is a function that accepts a list of
-strings and will be called on completion."
-      (lexical-let ((handler callback)
-                    (cmd (eclim--make-command args)))
-        (when (not (find cmd eclim--currently-running-async-calls :test #'string=))
-          (lexical-let
-              ((buf (get-buffer-create (generate-new-buffer-name "*eclim-async*")))
-               (tempfile (make-temp-file "eclim")))
-            (when eclim-print-debug-messages
-              (message "Executing: %s" cmd)
-              (message "Using async buffer %s" buf)
-              (message "Using temp file %s" tempfile))
-            (push cmd eclim--currently-running-async-calls)
-
-            (let ((proc (start-process-shell-command "eclim" buf (concat (eclim--make-command args) ">" tempfile))))
-              (let ((sentinel (lambda (process signal)
-                                (unwind-protect
-                                    (save-excursion
-                                      (setq eclim--currently-running-async-calls (remove-if (lambda (x) (string= cmd x)) eclim--currently-running-async-calls))
-                                      (with-current-buffer buf
-                                        (insert-file-contents-literally tempfile)
-                                        (delete-file tempfile)
-                                        (funcall handler (eclim--parse-result (buffer-substring 1 (point-max))))))
-                                  (kill-buffer buf)))))
-                (set-process-sentinel proc sentinel)))))))
-
-
-    ;; so that when a problem is corrected, we refresh the problems so
-    ;; it goes away
-    (defun eclim-refresh-problems-if-necessary (&rest args)
-      (when (and (string-equal (car args) "java_correct")
-                 (member "-a" args))
-        (eclim-problems-buffer-refresh)))
-
-    (advice-add 'eclim--call-process :after #'eclim-refresh-problems-if-necessary)
-    ;;(advice-remove 'eclim--call-process #'eclim-refresh-problems-if-necessary)
-
-    (advice-add 'eclim--complete :after #'eclim--problems-update-maybe)
-
-    (defun eclim-next-error ()
-      "Go to the next error if there is one"
-      (interactive)
-      (loop
-       with point = (point)
-       with current = (eq (get-char-property point 'category) 'eclim-problem)
-       with problem
-       do (setq point (next-overlay-change point)
-                problem (eq (get-char-property point 'category) 'eclim-problem))
-       when (and current (not problem)) do (setq current nil)
-       when (and (not current) problem) do (goto-char point) and return nil
-       when (eq point (point-max)) do (with-temp-message "No more errors" (sleep-for .75)) and return nil))
-
-    (defun eclim-previous-error ()
-      "Go to the previous error if there is one"
-      (interactive)
-      (loop
-       with point = (point)
-       with current = t
-       with problem
-       do (setq point (previous-overlay-change point)
-                problem (eq (get-char-property point 'category) 'eclim-problem))
-       when (and current (not problem)) do (setq current nil)
-       when (and (not current) problem) do (goto-char point) and return nil
-       when (eq point (point-min)) do (with-temp-message "No previous errors" (sleep-for .75)) and return nil))
-
-    ;; Key Bindings
-    (define-key eclim-mode-map (kbd "C-c C-e c") 'eclim-java-call-hierarchy)
-    (define-key eclim-mode-map (kbd "C-c C-e q") 'eclim-problems-correct)
-    (define-key eclim-mode-map (kbd "s-,") 'eclim-previous-error)
-    (define-key eclim-mode-map (kbd "s-.") 'eclim-next-error))
-  )
-
 ;;; *** chrome helper functions
 (defun chrome-url ()
-  "Get current chrome url"
+  "Get current chrome url."
   (do-applescript
    (concat
     "tell application \"Google Chrome\"\n"
@@ -1304,7 +1279,7 @@ strings and will be called on completion."
     "end tell\n")))
 
 (defun chrome-host ()
-  "Get current chrome host"
+  "Get current chrome host."
   (replace-regexp-in-string
    "https?://\\([^/]+\\)/.*" "\\1" (chrome-url)))
 
@@ -1313,6 +1288,8 @@ strings and will be called on completion."
 ;;; *** Elisp navigation
 ;; from http://emacsredux.com/blog/2014/06/18/quickly-find-emacs-lisp-sources/
 (use-package elisp-slime-nav
+  :ensure t
+  :diminish
   :config
   (progn
    (dolist (hook '(emacs-lisp-mode-hook ielm-mode-hook))
@@ -1335,9 +1312,10 @@ strings and will be called on completion."
     (require 'spaceline-config)
     (setq powerline-default-separator 'roundstub)
     (spaceline-emacs-theme)
+    (setq spaceline-always-show-segments t)
     (spaceline-toggle-selection-info-off)
     (spaceline-toggle-buffer-size-off)
-    (spaceline-toggle-mu4e-alert-segment-on)
+    ;(spaceline-toggle-mu4e-alert-segment-on)
     ;(spaceline-toggle-erc-track-on)
 
     (spaceline-define-segment buffer-id
@@ -1358,17 +1336,27 @@ strings and will be called on completion."
 (use-package projectile
   :ensure t
   :commands projectile-global-mode
-  :init (projectile-global-mode)
+  :init (projectile-mode)
   :diminish projectile-mode
   :config
   (progn
-    (setq projectile-completion-system 'helm)
+    (setq projectile-completion-system 'helm
+          projectile-require-project-root nil)
     (defun projectile-project-root-advice (orig-func &rest args)
       (if (file-remote-p default-directory)
           nil ;; no projectile stuff in remote directores.  
         (apply orig-func args)))
     (advice-add 'projectile-project-root :around 'projectile-project-root-advice)
-    (projectile-cleanup-known-projects))
+    (projectile-cleanup-known-projects)
+
+    ;; this allows it to work in buffers that are not associated with a file, but are associated with a directory like a shell
+    ;; note: 
+    ;; after upgrading projectile, this failed, so quoted it out.  Perhaps it's not needed any more
+    '(patch-function 'projectile-project-root
+                    "(or buffer-file-name 'none)"
+                    '(or buffer-file-name default-directory 'none)
+                    )
+    )
   )
 
 ;;; *** helm-projectile
@@ -1395,9 +1383,9 @@ strings and will be called on completion."
   :ensure t
   :config
   (progn
-    (setq helm-ag-use-grep-ignore-list t)
+    (custom-set-variables '(helm-ag-use-grep-ignore-list t))
     ;; ag-truncate is used to tame ag results from minimized javascript files
-    (setq helm-ag-base-command "~/.emacs.d/ag-truncate.sh --nocolor --nogroup --smart-case --column")
+    (custom-set-variables '(helm-ag-base-command "~/.emacs.d/ag-truncate.sh --nocolor --nogroup --smart-case --column"))
     (defun helm-find-files-ag (candidate)
       "Default action to grep files from `helm-find-files'.  Replaces helm-find-files-grep."
       (let ((default-directory candidate))
@@ -1426,7 +1414,7 @@ strings and will be called on completion."
     (add-to-list 'grep-find-ignored-directories "ci_system")
     (add-to-list 'grep-find-ignored-directories "bin5")
     (add-to-list 'grep-find-ignored-directories "bin")
-    (add-to-list 'grep-find-ignored-directories "build")
+    (add-to-list 'grep-find-ignored-directories "build/")
     (add-to-list 'grep-find-ignored-directories "docs/api")))
 
 ;;; *** ag
@@ -1480,13 +1468,13 @@ strings and will be called on completion."
 
 ;;; *** swiper
 (use-package swiper
-
+  :ensure t
   ;; :bind (("C-s" . swiper-or-isearch-forward)
   ;;        ("C-r" . swiper-or-isearch-backward))
   :config
   (progn
     (global-set-key [C-s-268632083] 'swiper-helm)
-    (setq isearch-modes '(shell-mode term-mode Info-mode messages-buffer-mode pdf-view-mode log4j-mode))
+
     (setq ivy-display-style 'fancy)
     ;; old way (member major-mode isearch-modes)
     (defun can-use-swiper ()
@@ -1512,10 +1500,12 @@ strings and will be called on completion."
   :config
   (progn
     (setq swiper-helm-display-function 'helm-default-display-buffer)
-    (require 'which-func)
-    (defun swiper-update-which-func (&rest args)
-      (which-func-update-1 (helm-persistent-action-display-window)))
-    (advice-add 'swiper--update-sel :after 'swiper-update-which-func )))
+    ;; the following should have been replaced by similar code under (use-package helm)
+    ;; (require 'which-func)
+    ;; (defun swiper-update-which-func (&rest args)
+    ;;   (which-func-update-1 (helm-persistent-action-display-window)))
+    ;; (advice-add 'swiper--update-sel :after 'swiper-update-which-func )
+    ))
 
 
 ;;; *** cmds.c
@@ -1552,63 +1542,6 @@ strings and will be called on completion."
         ))
     (advice-add 'ffap-guesser :around #'my-ffap-guesser)))
 
-;;; *** ido
-'(use-package ido
-  :init
-  (ido-mode 1)
-  :config
-  (progn
-    (setq ido-use-filename-at-point 'guess)
-    (defun my-ffap-guesser (orig-func &rest args)
-      (let* ((ffap-url-regexp nil)
-             (retval (apply orig-func args)))
-        (if (or
-             (member retval '("/" "/**" "//"))
-             (eq major-mode 'dired-mode))
-            nil
-          retval)))
-    (advice-add 'ffap-guesser :around #'my-ffap-guesser)
-    (ido-everywhere 1)
-    ;;(flx-ido-mode 1)
-    (setq ido-enable-flex-matching t)
-    ;; disable ido faces to see flx highlights
-                                        ;(setq ido-use-faces nil)
-    (setq ido-create-new-buffer 'always)
-    (use-package ido-ubiquitous
-      :config
-      (progn
-        (ido-ubiquitous-mode 1)))
-
-    '(use-package idomenu
-       :bind ("s-r" . idomenu)
-       :config
-       (progn
-         (defun flatten-index (i prefix)
-           (let* ((name (car i))
-                  (qname (if (> (length prefix) 0) (concat prefix "." name) name))
-                  (d (cdr i)))
-             (if (listp d)
-                 (cl-reduce
-                  'append
-                  (mapcar (lambda (subindex) (flatten-index subindex qname)) d))
-               (list (cons qname d)))))
-
-         (defadvice idomenu--read (around idomenu--read-flatten
-                                          (index-alist &optional prompt guess)
-                                          activate )
-           "Flatten hierarchical indexes that get passed to this function"
-           (let ((index-alist (flatten-index (cons "" index-alist) "")))
-             ad-do-it))))
-
-
-    
-    ;; from http://emacsredux.com/blog/2013/04/21/edit-files-as-root/
-    '(advice-add 'dired-find-file :after #'find-file-sudo)
-    '(advice-add 'ido-find-file :after #'find-file-sudo)
-    '(advice-remove 'dired-find-file  #'find-file-sudo)
-    '(advice-remove 'ido-find-file  #'find-file-sudo)
-    ))
-
 ;;; *** mwheel
 (use-package mwheel
   :init
@@ -1625,6 +1558,23 @@ strings and will be called on completion."
   :init
   (recentf-mode))
 
+;;; *** table navigation
+(use-package table
+  :config
+    (defun around-table-navigate (orig-func &rest args)
+    (let ((line (count-lines 1 (point))))
+      (apply orig-func args)
+      (let ((diff (- line (count-lines 1 (point)))))
+        (next-logical-line diff)
+        (forward-word)
+        (backward-word)
+        )))
+
+  (advice-add 'table-forward-cell :around 'around-table-navigate)
+  (advice-add 'table-backward-cell :around 'around-table-navigate)
+
+  )
+
 ;;; *** syntax-subword-mode
 ;; better word navigation
 (use-package syntax-subword
@@ -1633,6 +1583,11 @@ strings and will be called on completion."
   (progn
     (global-syntax-subword-mode 1)
     (setq syntax-subword-skip-spaces 'consistent)))
+
+;;; *** dumb-jump
+(use-package dumb-jump
+  :ensure t)
+
 ;;; *** helm
 ;; better word navigation
 (use-package helm
@@ -1699,14 +1654,33 @@ strings and will be called on completion."
             ;; fix helm ffap.  There is a bug where a if a remote file has a
             ;; file reference, it gets discarded as being a candidate for ffap
             ;; behavior by helm because it is remote.  This addresses that.
-            (patch-function
+            ;; note: after update, the patch stopped matching, maybe they've fixed the bug
+            '(patch-function
              'helm-find-files-input
              "(and file-at-pt[ \t\r\n]*(not remp)[ \t\r\n]*(file-exists-p file-at-pt))"
              '(and file-at-pt
                    (or (not remp) 
                        (file-exists-p file-at-pt))))
 
+            ;; don't let helm sort if the completing read supplies its own sort function
+            ;; this was motivated by mu4e when doing recipient autocompletion.  We want to keep
+            ;; mu4e's sorting
+            ;; note: patch stopped matching after upgrade. maybe not needed anymore?
+            '(patch-function 'helm--completion-in-region
+                            "(null helm-completion-in-region-default-sort-fn)"
+                            '(or (null helm-completion-in-region-default-sort-fn)
+                                 (completion-metadata-get metadata 'display-sort-function)))
+
+            ;; make which-function upadte
+            (require 'which-func)
+            (defun update-which-func (&rest args)
+              (which-func-update-1 (helm-persistent-action-display-window)))
+            ;(add-hook 'helm-after-persistent-action-hook 'update-which-func)
+            (add-hook 'helm-move-selection-after-hook 'update-which-func)
             ))
+
+(use-package helm-git-grep
+  :ensure t)
 
 ;;; ** Major Modes
 
@@ -1740,7 +1714,7 @@ strings and will be called on completion."
     (defun find-and-fix-camel-case ()
       (interactive)
       (while (find-camel-case)
-        (if (and (not (nth 3 (syntax-ppss))) (y-or-n-p "Fix?" ))
+        (if (and (not (nth 3 (syntax-ppss))) (y-or-n-p "Fix? " ))
             (camel-to-underscore)
           (forward-word))
         
@@ -1781,8 +1755,11 @@ strings and will be called on completion."
 ;;; *** pdf-view
 (use-package pdf-tools
   :ensure t
-  :config (progn
-            (pdf-tools-install)))
+  :config
+  (pdf-tools-install)
+  (setq 
+   pdf-misc-print-programm "/usr/bin/lpr" 
+   pdf-misc-print-programm-args '("-o media=Letter" "-o fitplot")))
 
 ;;; *** js2-mode
 (use-package js2-mode
@@ -1803,7 +1780,6 @@ strings and will be called on completion."
       (progn
         ;(add-hook 'js2-mode-hook 'ac-js2-mode) commented out to try tern
         (setq ac-js2-evaluate-calls t) ;; installation instructions from ac-js2, for auto-complete in browser)
-        (require 'jquery-doc)
         (add-hook 'js2-mode-hook 'jquery-doc-setup)
 
         ))
@@ -1872,6 +1848,7 @@ strings and will be called on completion."
 ;;; *** php-mode
 
 (defun maio/electric-semicolon ()
+  "Insert a semicolon at the end of the line."
   (interactive)
   (end-of-line)
   (when (not (looking-back ";"))
@@ -2263,12 +2240,6 @@ of the line.  This expects the xmltok-* variables to be set up as by
   ;; fixes nested comment behavior in nxmlo
   (add-to-list 'comment-strip-start-length (cons 'nxml-mode 3)))
 
-
-;;; *** actionscript-mode
-(use-package actionscript-mode
-  :mode (("\\.as$" . actionscript-mode)
-         ("\\.mxml$" . actionscript-mode)))
-
 ;;; *** auto-complete
 (use-package auto-complete
   :ensure t
@@ -2338,6 +2309,10 @@ of the line.  This expects the xmltok-* variables to be set up as by
 ;;; *** highlight
 ;; only used for hlt-highlight-region by calc below
 (use-package highlight
+  :ensure t)
+
+;;; *** idle-highlight-mode
+(use-package idle-highlight-mode
   :ensure t)
 
 ;;; *** calc
@@ -2542,6 +2517,8 @@ fi" nil insert-directory-program)
                   "?"))
        )
 
+      (put 'dired-find-alternate-file 'disabled nil)
+
       ;; from http://stackoverflow.com/questions/19907939/how-can-one-quickly-browse-through-lots-of-files-in-emacs
       ;; little modification to dired-mode that let's you browse through lots of files
       '(add-hook 'dired-mode-hook
@@ -2657,7 +2634,7 @@ fi" nil insert-directory-program)
                                nil (m (if (string= single-file (dired-get-filename))
                                           nil
                                         (dired-get-filename))) t))))
-              (t (error "mark no more than two files")))))
+              (t (error "Mark no more than two files")))))
     (bind-key "=" 'mkm/ediff-marked-pair dired-mode-map)))
 
 
@@ -2822,8 +2799,9 @@ Interactively, reads the register using `register-read-with-preview'."
 (use-package ns-win
   :config
   (global-set-key [M-drag-n-drop] 'ns-drag-n-drop))
+
 ;;; *** archive
-(use-package archive
+(use-package arc-mode
   :config
   (progn
 
@@ -2957,6 +2935,8 @@ set output
                 (set-face-attribute 'org-table nil :inherit 'fixed-pitch)
                 (set-face-attribute 'org-code nil :inherit 'fixed-pitch)))
 
+    (add-hook 'org-mode-hook 'toggle-truncate-lines )
+    (add-hook 'org-mode-hook 'toggle-word-wrap )
     ;; fixup links 
     (defun org-html-link-merc (orig-func &rest args)
       (replace-regexp-in-string "file:///Users/rblack/code/hg/\\([^/]+\\)/" "http://merc.footnote.com/\\1/file/tip/"
@@ -3006,7 +2986,7 @@ set output
 
     ;; from https://gist.github.com/wallyqs/724e61e9d070b1d4e95b
     '(patch-function 'org-babel-eval
-                    "(progn
+                     "(progn
 	    (with-current-buffer err-buff
 	      (org-babel-eval-error-notify exit-code (buffer-string)))
 	    (save-excursion
@@ -3017,17 +2997,17 @@ set output
 		  ;; Compilation-mode enforces read-only, but Babel expects the buffer modifiable.
 		  (setq buffer-read-only nil))))
 	    nil)"
-                    ;; W: force to return output even if there was an error
-	                '(progn
-	                  (concat (buffer-string)
-		                      (with-current-buffer err-buff
-		                        ;; (org-babel-eval-error-notify exit-code (buffer-string)
-		                        (buffer-string)
-		                        )))
-                    )
+                     ;; W: force to return output even if there was an error
+	                 '(progn
+	                    (concat (buffer-string)
+		                        (with-current-buffer err-buff
+		                          ;; (org-babel-eval-error-notify exit-code (buffer-string)
+		                          (buffer-string)
+		                          )))
+                     )
 
     ;; putting it back to normal
-    (patch-function 'org-babel-eval
+    '(patch-function 'org-babel-eval
                    
                     )
 
@@ -3043,11 +3023,11 @@ set output
     (setq
 
      org-agenda-files
-     `("~/org/life.org" "~/org/flagged.org" "~/Dropbox/orgfiles/gcal.org" "~/Dropbox/orgfiles/mollicoa.org" "~/Dropbox/orgfiles/sar.org" ,exchange-cal-file)
+     `( "~/org/ia-tasks.org" "~/org/np-tasks.org" "~/org/fg-tasks.org" "~/org/flagged.org" "~/Dropbox/orgfiles/gcal.org" "~/Dropbox/orgfiles/mollicoa.org" "~/Dropbox/orgfiles/sar.org" ,exchange-cal-file)
      org-agenda-include-diary nil
      org-agenda-prefix-format
      (quote
-      ((agenda . " %i %-12:c%?-12t% s%-10 e")
+      ((agenda . " %i %-12:c%?-12t% s%-6 (condition-case nil (let ((sum (org-clock-sum-current-item))) (if (> sum 0) (concat (org-duration-from-minutes sum ) \" /\") \"\"))  (error \"\")) %-5 e")
        (timeline . "  % s")
        (todo . " %i %-12:c")
        (tags . " %i %-12:c")
@@ -3124,7 +3104,7 @@ set output
       (interactive)
       (insert ":=vsum(@1..@-1);N")
       )
-    (bind-key (kbd "C-c g") 'org-mac-grab-link org-mode-map)
+    (bind-key (kbd "C-c g") 'grab-mac-link org-mode-map)
     (bind-key (kbd "C-c s") 'org-table-sum-column org-mode-map)
     (bind-key (kbd "C-s") 'isearch-forward org-mode-map)
     (bind-key (kbd "C-r") 'isearch-backward org-mode-map)
@@ -3154,34 +3134,27 @@ applied."
           '(
             ("a" "Appointment" entry (file  "~/Dropbox/orgfiles/gcal.org" )
              "* %?\n%^T\n\n")
-            ("w" "Work TODO" entry (file+olp "~/org/life.org" "Work" "Tasks")
+            ("n" "Newspapers TODO" entry (file+olp+datetree "~/org/np-tasks.org")
              "* TODO %? %i
-:PROPERTIES:
-:CREATED: %U
-:END:")
-            ("M" "Work Meeting" entry (file+olp "~/org/life.org" "Work" "Meetings")
-             "* %T Meeting: %? %i
-:PROPERTIES:
-:CREATED: %U
-:END:")
-            ("m" "Mail" entry (file+olp "~/org/life.org" "Work" "Tasks")
-             "* TODO %(org-mac-message-get-links)%? %i
-:PROPERTIES:
-:CREATED: %U
-:END:")
-            ("c" "Chrome" entry (file+olp "~/org/life.org" "Work" "Tasks")
-             "* TODO %(org-mac-chrome-get-frontmost-url)%? %i
-:PROPERTIES:
-:CREATED: %U
-:END:")
-            ("l" "Work TODO with link" entry (file+headline "~/org/life.org" "Work")
+")
+            ("f" "Find-A-Grave TODO" entry (file+olp+datetree "~/org/fg-tasks.org")
+             "* TODO %? %i
+")
+            ("b" "Business Tasks TODO" entry (file+olp+datetree "~/org/business-tasks.org")
+             "* TODO %? %i
+")
+            ("j" "Business Tasks TODO" entry (file+olp+datetree "~/org/business-journal.org")
+             "* Journal Entry%?
+")
+            ("i" "iArchives TODO" entry (file+olp+datetree "~/org/ia-tasks.org")
+             "* TODO %? %i
+")
+            ("M" "Work Meeting" entry (file+olp+datetree "~/org/meetings.org")
+             "* %?
+")
+
+            ("l" "Work TODO with link" entry (file+headline "~/org/life.org" "Work" "Tasks")
              "* TODO %?%a
-:PROPERTIES:
-:CREATED: %U
-:END:
-%i")
-            ("b" "Buy" entry (file+headline "~/org/life.org" "Shopping")
-             "* TODO %?
 :PROPERTIES:
 :CREATED: %U
 :END:
@@ -3205,12 +3178,12 @@ applied."
 :CREATED: %U
 :END:
 %i")
-            ("t" "General TODO" entry (file+headline "~/org/life.org" "Tasks")
-             "* TODO %?
-:PROPERTIES:
-:CREATED: %U
-:END:
-%i")
+;;             ("t" "General TODO" entry (file+headline "~/org/life.org" "Tasks")
+;;              "* TODO %?
+;; :PROPERTIES:
+;; :CREATED: %U
+;; :END:
+;; %i")
             ("p" "Password" entry (file org-passwords-file)
              "* %^{Title|%(org-passwords-chrome-title)}
 :PROPERTIES:
@@ -3227,10 +3200,6 @@ applied."
         (setq org-crypt-key nil)))
 
                                         ;(use-package ox-reveal)
-    (use-package org-mac-link
-      :ensure t
-      :commands org-mac-grab-link
-      :config (message "org-mac-link loaded"))
 
     (use-package org-inlinetask
       :config
@@ -3246,10 +3215,36 @@ See `org-html-format-inlinetask-function' for details."
                   (or contents ""))) ;; this patch is here because when contents is nil it was printing nil
         )
       )
+    ;; make sure org-captures end with a newline to keep stuff from getting screwed up
+    (defun org-capture-ensure-newline ()
+      (when (not (eq 10 (char-before (point-max)))) (goto-char (point-max)) (insert "\n")))
+
+    (add-hook 'org-capture-prepare-finalize-hook 'org-capture-ensure-newline)
+    
     ))
 
-(use-package org-alert
+(use-package ox-reveal
+  :ensure t
+  :config
+  (setq org-reveal-root "file:///Users/rblack/lib/reveal.js")
+  )
+
+(use-package hexrgb
   :ensure t)
+
+(use-package grab-mac-link
+  :ensure t
+  :commands grab-mac-link)
+
+'(use-package org-alert
+  :ensure t
+  :config
+  (org-alert-enable))
+
+'(use-package org-wild-notifier
+  :ensure t
+  :config
+  (org-wild-notifier-mode))
 
 (use-package ox-twbs
   :ensure t
@@ -3263,13 +3258,23 @@ See `org-html-format-inlinetask-function' for details."
   :config
   (add-hook 'org-mode-hook (lambda () (org-bullets-mode 1))))
 
+(use-package calendar
+  :config
+  (defun calendar-insert-date ()
+    "Capture the date at point, exit the Calendar, insert the date."
+    (interactive)
+    (seq-let (month day year) (save-match-data (calendar-cursor-to-date))
+      (calendar-exit)
+      (insert (format "%d-%02d-%02d" year month day))))
+
+  (define-key calendar-mode-map (kbd "RET") 'calendar-insert-date)
+)
+
 (use-package calfw
-  :ensure 
+  :ensure t
   :config
   (require 'calfw) 
-  (require 'calfw-org)
   (setq cfw:org-overwrite-default-keybinding t)
-  (require 'calfw-ical)
 
   (defun mycalendar ()
     (interactive)
@@ -3282,22 +3287,29 @@ See `org-html-format-inlinetask-function' for details."
       ))) 
   (setq cfw:org-overwrite-default-keybinding t))
 
+(use-package calfw-org
+  :ensure t)
+
+(use-package calfw-ical
+  :ensure t)
+
+
+
 ;;; ** ews-fetch-calendar
 (defun exchange-sync ()
+  "Fetch the exchange calendar into an org file."
+  (interactive)
   (let ((display-buffer-alist
          
          (list (cons "\\*Async Shell Command\\*.*" 
                      (cons #'display-buffer-no-window nil))))) ;; suppress async shell command window
-    ;(async-shell-command (concat "if ping -c 1 " smtpmail-smtp-server ">/dev/null 2>&1; then  ~/lib/ews-orgmode/ews-fetch-calendar.py > " exchange-cal-file ".tmp && mv " exchange-cal-file ".tmp " exchange-cal-file "; fi "))
+   
     (async-shell-command (concat  "~/lib/ews-orgmode/ews-fetch-calendar.py > " exchange-cal-file ".tmp && mv " exchange-cal-file ".tmp " exchange-cal-file))
+    (run-at-time 3600 nil 'exchange-sync) ;; reschedule next one
     ))
 
-(setq exchange-sync-calendar (run-at-time 60 3600 'exchange-sync)) ;; start after 1 minute, and refresh once an hour.
+;(setq exchange-sync-calendar (run-at-time 60 nil 'exchange-sync)) ;; start after 1 minute, and refresh once an hour.
 ;(cancel-timer exchange-sync-calendar)
-
-;;; ** ox-reveal
-(use-package ox-reveal
-  :ensure t)
 
 ;;; ** org-passwords
 (use-package org-passwords
@@ -3314,19 +3326,12 @@ See `org-html-format-inlinetask-function' for details."
 (use-package midnight
   :defer 60
   :config
-  (progn
-    (setq midnight-hook '(clean-buffer-list
-                          org-mobile-push
-                          org-gcal-sync
-                          xkcd
-                          ))
-    (midnight-delay-set 'midnight-delay 43200)))
-
-;;; ** exec-path-from-shell
-(use-package exec-path-from-shell
-  :ensure t
-  :init (exec-path-from-shell-initialize) ; set the right PATH variable
-  )
+  (setq midnight-hook '(clean-buffer-list
+                        ;; org-mobile-push
+                        org-gcal-fetch
+                        xkcd
+                        ))
+  (midnight-delay-set 'midnight-delay 43200))
 
 ;;; ** package
 (use-package package
@@ -3421,6 +3426,20 @@ Requires ImageMagick installation"
 
     ))
 
+;;; sqlite-mode
+(use-package sqlite-dump
+  :config
+  (modify-coding-system-alist 'file "\\.sqlite\\'" 'raw-text-unix)
+  (add-to-list 'auto-mode-alist '("\\.sqlite\\'" . sqlite-dump))
+  (modify-coding-system-alist 'file "\\.sqlite3\\'" 'raw-text-unix)
+  (add-to-list 'auto-mode-alist '("\\.sqlite3\\'" . sqlite-dump))
+  (modify-coding-system-alist 'file "\\.localstorage\\'" 'raw-text-unix)
+  (add-to-list 'auto-mode-alist '("\\.localstorage\\'" . sqlite-dump))
+  (modify-coding-system-alist 'file "\\.db\\'" 'raw-text-unix)
+  (add-to-list 'auto-mode-alist '("\\.db\\'" . sqlite-dump))
+  
+  )
+
 ;;; ** diff-mode
 (use-package diff-mode
   :bind
@@ -3459,26 +3478,26 @@ Requires ImageMagick installation"
   :config (which-key-mode))
 
 ;;; ** mu4e-alert
-(use-package mu4e-alert
+'(use-package mu4e-alert
   :ensure t
   :config
   (progn (setq mu4e-alert-interesting-mail-query "flag:unread AND maildir:/inbox")
          (mu4e-alert-enable-mode-line-display)
          (patch-function 'mu4e-alert-enable-mode-line-display
                          "'mu4e-msg-changed-hook"
-                         (if (boundp 'mu4e-message-changed-hook)
-                             'mu4e-message-changed-hook
-                           'mu4e-msg-changed-hook))
+                         '(if (boundp 'mu4e-message-changed-hook)
+                              'mu4e-message-changed-hook
+                            'mu4e-msg-changed-hook))
          (patch-function 'mu4e-alert-disable-mode-line-display
                          "'mu4e-msg-changed-hook"
-                         (if (boundp 'mu4e-message-changed-hook)
-                             'mu4e-message-changed-hook
-                           'mu4e-msg-changed-hook))
+                         '(if (boundp 'mu4e-message-changed-hook)
+                              'mu4e-message-changed-hook
+                            'mu4e-msg-changed-hook))
          ))
 ;;; ** Company-Specific Packages
 ;;; *** jenkins-build
 (use-package jenkins-build
-  :commands (dfb dbb sfb sbb lfb lbb ncb))
+  :commands (dfb dbb sfb sbb lfb lbb ncb pb))
 
 ;;; *** project-search
 '(use-package project-search
@@ -3502,12 +3521,65 @@ Requires ImageMagick installation"
 (use-package mark-state-mode
   :config (mark-state-mode))
 
+(use-package rest-doc-mode
+  :mode "\\.rest-doc$"
+  )
+
+(use-package elm-mode
+  :ensure t
+  )
+
+(use-package flycheck-elm
+  :ensure t
+  :config
+  (add-hook 'flycheck-mode-hook #'flycheck-elm-setup)
+  )
+
+(use-package lsp-mode
+  :ensure t
+  :config (add-hook 'elm-mode-hook #'lsp)
+  (setq lsp-prefer-flymake nil)
+  :commands lsp)
+
+(use-package lsp-ui
+  :ensure t
+  :requires lsp-mode flycheck
+  :config
+
+  (setq lsp-ui-doc-enable t
+        lsp-ui-doc-use-childframe t
+        lsp-ui-doc-position 'top
+        lsp-ui-doc-include-signature t
+        lsp-ui-sideline-enable nil
+        lsp-ui-flycheck-enable t
+        lsp-ui-flycheck-list-position 'right
+        lsp-ui-flycheck-live-reporting t
+        lsp-ui-peek-enable t
+        lsp-ui-peek-list-width 60
+        lsp-ui-peek-peek-height 25)
+
+  (add-hook 'lsp-mode-hook 'lsp-ui-mode))
+
+
 ;;; * Misc Functions
+
+(defun scale-image-if-image-mode (&rest args)
+  ""
+  (if (eq major-mode 'image-mode)
+      (image-transform-set-scale
+       (expt text-scale-mode-step
+		     text-scale-mode-amount))))
+
+(defun image-scale-register-hook ()
+  (add-hook 'text-scale-mode-hook 'scale-image-if-image-mode))
+
+(add-hook 'image-mode-hook 'image-scale-register-hook)
+
 
 ;; Fold at indentation
 ;; from https://stackoverflow.com/questions/1587972/how-to-display-indentation-guides-in-emacs/4459159#4459159
 (defun aj-toggle-fold ()
-  "Toggle fold all lines larger than indentation on current line"
+  "Toggle fold all lines larger than indentation on current line."
   (interactive)
   (let ((col 1))
     (save-excursion
@@ -3522,6 +3594,12 @@ Requires ImageMagick installation"
 ;; browse-url-emacs, it will fail.  This ensures that the call can
 ;; proceed by setting the directory to "" when its' invalid.
 (defun ensure-directory-call-process (orig-func &rest args)
+  "Ensure that there is a valid directory when `call-process' is called.
+ORIG-FUNC is the `call-process’ function, ARGS are the arguments
+passed to that function.  If `call-process’ is called with an
+invalid value in `default-directory’, such as when the buffer comes
+from `browse-url-emacs’, it will fail.  This ensures that the call
+can proceed by setting the directory to \"\" when its' invalid."
   (if (file-accessible-directory-p default-directory)
       (apply orig-func args)
     (let ((default-directory ""))
@@ -3530,6 +3608,7 @@ Requires ImageMagick installation"
 (advice-add 'call-process :around 'ensure-directory-call-process)
 
 (defun display-default-directory ()
+  "Display the value of `default-directory’, or variable `buffer-file-name’ with prefix arg."
   (interactive)
   (kill-new (message
              (if current-prefix-arg
@@ -3544,8 +3623,9 @@ Requires ImageMagick installation"
 ;(global-set-key (kbd "C-h") 'delete-backward-char)
 ;(global-set-key (kbd "M-h") 'backward-kill-word)
 
-;; fix for a NPE bug in eww/gnus
 (defun my-mm-url-form-encode-xwfu (orig-func &rest args)
+  "Fix for a NPE bug in eww/gnus.
+ORIG-FUNC and ARGS are standard advice parameters."
   (if (car args)
       (apply orig-func args)
     ""))
@@ -3574,13 +3654,14 @@ spaces.  Die Die Die."
    ""))
 
 (defun get-random-element (list)
-  "Returns a random element of LIST."
+  "Return a random element of LIST."
   (if (not (and (list) (listp list)))
       (nth (random (1- (1+ (length list)))) list)
     (error "Argument to get-random-element not a list or the list is empty")))
 
 (defun switch-to-random-buffer ()
-  (switch-to-buffern
+  "Switch to a random buffer."
+  (switch-to-buffer
    (get-random-element
     (remove-if-not
      (lambda (b)
@@ -3589,9 +3670,8 @@ spaces.  Die Die Die."
      (buffer-list)))
    t))
 
-
-
 (defun mandelbrot ()
+  "Draw the mandelbrot set."
   (interactive)
   (pop-to-buffer (get-buffer-create "*mandelbrot*"))
   (when (not (boundp 'mandelbrot-xoffset)) (setq mandelbrot-xoffset 0))
@@ -3631,7 +3711,7 @@ spaces.  Die Die Die."
     ))
 
 (defun random-sort-lines (beg end)
-  "Sort lines in region randomly."
+  "Sort lines in region between BEG and END randomly."
   (interactive "r")
   (save-excursion
     (save-restriction
@@ -3643,9 +3723,10 @@ spaces.  Die Die Die."
                    (lambda (s1 s2) (eq (random 2) 0)))))))
 
 (defun remove-^M ()
-  "Remove ^M at end of line in the whole buffer.  This is done in ahg-diff-mode
-so that extra ^M's are not added when applying hunks with C-c C-a.  Plus it
-is a lot more readable without the ^M's getting in the way."
+  "Remove ^M at end of line in the whole buffer.
+This is done in ahg-diff-mode so that extra ^M's are not added when applying
+hunks with \\<diff-mode-map> \\[diff-apply-hunk].  Plus it is a lot more readable
+without the ^M's getting in the way."
   (interactive)
   (save-match-data
     (save-excursion
@@ -3655,7 +3736,7 @@ is a lot more readable without the ^M's getting in the way."
         (replace-match "")))))
 
 (defmacro measure-time (&rest body)
-  "Measure and return the running time of the code block."
+  "Measure and return the running time of BODY."
   (declare (indent defun))
   (let ((start (make-symbol "start")))
     `(let ((,start (float-time)))
@@ -3663,40 +3744,73 @@ is a lot more readable without the ^M's getting in the way."
        (- (float-time) ,start))))
 
 (defun func-region (start end func)
-  "run a function over the region between START and END in current buffer."
+  "Run FUNC over the region between START and END in current buffer."
   (save-excursion
+    (when (not (region-active-p))
+        ;; whole buffer
+        (setq start (point-min))
+        (setq end (point-max)))
     (let ((text (delete-and-extract-region start end)))
       (insert (funcall func text)))))
 
 (defun urlencode-region (start end)
-  "urlencode the region between START and END in current buffer."
+  "Url encode the region between START and END in current buffer."
   (interactive "r")
   (func-region start end #'url-hexify-string))
 
 (defun urldecode-region (start end)
-  "de-urlencode the region between START and END in current buffer."
+  "Url decode the region between START and END in current buffer."
   (interactive "r")
   (func-region start end #'url-unhex-string))
 
 (defun hex-decode-region (start end)
-  "un-hex-encode the region between START and END in current buffer.  Expects straight hex, no percents."
+  "Un-hex-encode the region between START and END in current buffer.  Expects straight hex, no percents."
   (interactive "r")
   (func-region start end #'decode-hex-string))
 
+(defun flate-decode-region (start end)
+  "Use deflate raw zlib encoding (flate encoding)"
+  (interactive "r")
+  (shell-command-on-region
+   start end
+   ;; "cat ./flatefile|(printf \"\\x1f\\x8b\\x08\\0\\0\\0\\0\\0\";cat)|gunzip"
+   "perl -MCompress::Zlib -e'undef$/;print uncompress<>||die(\"Decompression error\\n\")'"
+   nil t
+   )
+  )
+
+(defun flate-decode-string ()) 
+
 (defun decode-hex-string (hex-string)
+  "Hex decode HEX-STRING."
   (let ((res nil))
     (dotimes (i (/ (length hex-string) 2) (apply #'concat (reverse res)))
       (let ((hex-byte (substring hex-string (* 2 i) (* 2 (+ i 1)))))
         (push (format "%c" (string-to-number hex-byte 16)) res)))))
 
-(defun add-commas-to-numbers-in-region (start end)
-  "Add commas to NUMBER and return it as a string.
-    Optional SEPARATOR is the string to use to separate groups.
-    It defaults to a comma."
-  (interactive "r")
-  
-  (while (progn (goto-char start) (re-search-forward "\\(.*[0-9]\\)\\([0-9][0-9][0-9].*\\)" end t))
-    (replace-match "\\1,\\2")))
+(defun chunked-decode ()
+  "Decode chunked encoding.
+Place cursor at beginning of content body (after http headers)."
+  (interactive)
+  (loop with chars with start with end
+        ;; parse hex chunk length
+        do (insert "#x")
+        (left-char 2)
+        (setq start (point))
+        (setq chars (read (current-buffer)))
+        (setq end (point))
+        (kill-region start end)
+        ;; eat EOL
+        (when (eq 13 (char-after (point)))
+          (delete-char 1)) ;; delete 0x0d CR
+        (delete-char 1) ;; delete 0x0a LF
+        (right-char chars) ;; skip chunk data
+        ;; eat EOL
+        (when (eq 13 (char-after (point)))
+            (delete-char 1))
+        (delete-char 1)
+        until (eq chars 0) ;; this means we're at the end
+        ))
 
 (defun killdash9/comment-dwim (orig-func &rest args)
   (when (not (region-active-p))
@@ -3710,11 +3824,22 @@ is a lot more readable without the ^M's getting in the way."
 
 (advice-add 'comment-dwim :around #'killdash9/comment-dwim)
 
-(defun range (min max)
-  (when (<= min max)
-    (cons min (range (+ min 1) max))))
+;; Allow binary plist files to be edited
+(add-to-list 'jka-compr-compression-info-list
+             ["\\.plist$"
+              "converting text XML to binary plist"
+              "plutil"
+              ("-convert" "binary1" "-o" "-" "-")
+              "converting binary plist to text XML"
+              "plutil"
+              ("-convert" "xml1" "-o" "-" "-")
+              nil nil "bplist"])
+
+;;It is necessary to perform an update!
+(jka-compr-update)
 
 (defun save-and-refresh-chrome()
+  "Save the current file and reload Chrome."
   (interactive)
   (when buffer-file-name
     (save-buffer))
@@ -3764,13 +3889,27 @@ is a lot more readable without the ^M's getting in the way."
       (org-table-sort-lines nil ?N)))
   (pop-to-buffer "*word-statistics*"))
 
-(defun live-sql-buffer ()
-  (interactive)
-  (let ((sql-mysql-program "/usr/bin/ssh")
-        (sql-mysql-options '("-t" "config051.newspapers.com" "mysql")))
-    (sql-mysql "news-live")))
+(require 'hideshow)
+(require 'sgml-mode)
+(require 'nxml-mode)
+
+(add-to-list 'hs-special-modes-alist
+             '(nxml-mode
+               "<!--\\|<[^/>]*[^/]>"
+               "-->\\|</[^/>]*[^/]>"
+
+               "<!--"
+               sgml-skip-tag-forward
+               nil))
+
+(add-hook 'nxml-mode-hook 'hs-minor-mode)
+
+;; optional key bindings, easier than hs defaults
+(define-key nxml-mode-map (kbd "C-c h") 'hs-toggle-hiding)
+
 
 (defun my-sql-copy-column ()
+  "Copy a mysql column to the kill ring."
   (interactive)
   (save-excursion
     (re-search-backward "^\\+-+\\+\\(\n|\\|-\\)")
@@ -3792,7 +3931,18 @@ is a lot more readable without the ^M's getting in the way."
         (kill-new (buffer-string)))
       (message "Column copied"))))
 
+(defun sql-format-region (start end)
+  "Format the region from START to END using simple rules."
+  (interactive "r")
+  (func-region start end #'sql-format))
+
+(defun sql-format (sql)
+  "Format the SQL."
+  (replace-regexp-in-string "\\b\\(where\\|and\\|or\\|join\\)\\b" "\n\\1" sql)
+  )
+
 (defun paste-copied-column-with-comma-separated-quotes ()
+  "Paste copied column with comma-separated quotes."
   (interactive)
   (save-excursion
     (let ((start (point-marker)))
@@ -3813,14 +3963,25 @@ is a lot more readable without the ^M's getting in the way."
 ;;; * Customization Variables
 (load custom-file)
 
-;;; * Load Theme
-;;(load-theme 'atari t)
-(load-theme 'default-black t)
+(set-face-attribute 'default nil :height 140)
 
+;;; * Load Theme
+(add-to-list 'custom-theme-load-path "~/.emacs.d/themes")
+;;(custom-theme-load-path (quote (custom-theme-directory t "~/.emacs.d/themes")) t)
+;;(load-theme 'atari t)
+;;(load-theme 'default-black t)
+(use-package base16-theme
+  :ensure t
+  :config
+  ;; (load-theme 'base16-greenscreen t)
+  ;; try next, wombat
+  ;;(load-theme 'base16-tube t)
+  (load-theme 'base16-spacemacs t)
+  )
 
 ;;; * Local Variables
 ;; Local Variables:
 ;; eval: (orgstruct-mode 1)
 ;; orgstruct-heading-prefix-regexp: ";;; "
 ;; End:
-    
+

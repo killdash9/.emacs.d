@@ -36,7 +36,6 @@
  '(custom-safe-themes
    (quote
     ("002f5512e880c0ab5609c1feb758884df35807f9cb00c2dc77d96664213c4936" "b987df2743acef44d0ea46d555ff4a5dcf522e0b7791ea0fca62315f034b04b8" "01ccbb2bbd660e98e3977a528bcf905f16cc86d4d881a4df03d3f98a3f611fa1" "46a8646bfe191df614aae7b9209bb3dc72a4259c0f5cacd7b61a03a65d470783" "6aa7714697f9e9f495c78fac77e40cef181e453916d1b19e691fa240116f9ec9" "7bc5c5e58a321ff198d92db4bb377b2e5928f56cc776efca69d45660754c2a3e" "a80f6a85d84170b67749782db7e1aa7c0339caf6d645879ba9924536f87db762" "11b82f1b39397638b5c26f3a6c038992a870b614a1d59455871aa9d2ecb47939" "a27c00821ccfd5a78b01e4f35dc056706dd9ede09a8b90c6955ae6a390eb1c1e" "0c3f22acd840eaa072cb23d6c786fa00a69697593ac9d931087b87e072262a61" "6788ec244e2cb7e03ec12264888f3ad956f6373e92c0f964288fb984dd628977" "815956f68af145fca4fca99354b218112ce634225705931c0a8f6cc7c2c821ab" "f4405fefab9d7828fd3e0876a21af95cfae7d03146fb95b6480118325b43e22c" "05861f7ac0f5445539cb45ec2c1c47b4434d2e3c98f1de329d590242a70694ab" "efb876a2714f5a68f60f9db2b55852f039de39043efe788086d391d054908d31" "09a8deda49fcf29d19225b9f04000e8df5bf63907471b8f7a22019b76ccf18fd" "ee0ab0c0064d76662eef47614a587b3316a81418e54090a41b8d9704a7fcfee1" default)))
- '(custom-theme-load-path (quote (custom-theme-directory t "~/.emacs.d/themes")) t)
  '(debug-on-error nil)
  '(dired-dwim-target t)
  '(dired-guess-shell-alist-user
@@ -49,6 +48,9 @@
  '(eclim-executable "/Applications/Eclipse.app/Contents/Eclipse/eclim")
  '(eclim-print-debug-messages nil)
  '(ediff-window-setup-function (quote ediff-setup-windows-plain))
+ '(elfeed-feeds
+   (quote
+    ("https://gizmodo.com/rss" "http://www.ksl.com/xml/148.rss" "http://rss.slashdot.org/Slashdot/slashdotMain")))
  '(epa-file-cache-passphrase-for-symmetric-encryption t)
  '(erc-hide-list (quote ("JOIN" "QUIT")))
  '(explicit-bash-args (quote ("--noediting" "-i" "-l")))
@@ -68,6 +70,9 @@
  '(grep-highlight-matches t)
  '(heartbeat-cursor-mode nil)
  '(helm-M-x-fuzzy-match t)
+ '(helm-ag-base-command
+   "~/.emacs.d/ag-truncate.sh --nocolor --nogroup --smart-case --column")
+ '(helm-ag-use-grep-ignore-list t)
  '(helm-apropos-fuzzy-match t)
  '(helm-autoresize-min-height helm-autoresize-max-height)
  '(helm-imenu-fuzzy-match t)
@@ -97,14 +102,11 @@
  '(litable-result-format "=> %s ")
  '(load-prefer-newer t)
  '(magit-file-buffer-arguments nil)
- '(magit-git-executable "/opt/local/bin/git")
+ '(magit-git-executable "/usr/local/bin/git")
  '(magit-log-auto-more t)
  '(magit-refs-margin (quote (nil age magit-log-margin-width t 18)))
  '(magit-refs-show-commit-count (quote all))
  '(magit-revision-show-gravatars nil)
- '(magit-status-headers-hook
-   (quote
-    (magit-insert-diff-filter-header magit-insert-remote-header magit-insert-head-header magit-insert-upstream-header magit-insert-tags-header)))
  '(markdown-command "multimarkdown")
  '(mazemax-char "C")
  '(mew-imap-ssl t)
@@ -127,7 +129,7 @@
  '(org-log-done (quote time))
  '(org-modules
    (quote
-    (org-bbdb org-bibtex org-docview org-gnus org-info org-irc org-mhe org-rmail org-w3m org-mac-link)))
+    (org-bbdb org-bibtex org-docview org-gnus org-info org-irc org-mhe org-rmail org-w3m)))
  '(org-outline-path-complete-in-steps nil)
  '(org-refile-targets (quote (("~/org/life.org" :level . 2))))
  '(org-refile-use-outline-path t)
@@ -141,7 +143,7 @@
  '(package-pinned-packages (quote ((csv-mode . "\"gnu\""))))
  '(package-selected-packages
    (quote
-    (jenkins org-alert slack mu4e-alert git-gutter-fringee ox-twbs spaceline diminish rainbow-mode rainbow beacon swiper go ob-sagemath sage-shell-mode go-mode magit jade-mode irfc messages-are-flowing org-ac git-messenger git-gutter git-gutter-fringe calfw org-gcal org-mime which-key ob-restclient org "org" paradox org-mac-link geben gnuplot jquery-doc typescript-mode nginx-mode expand-region flymake-yaml dockerfile-mode dot-mode web-mode graphviz-dot-mode ssh-config-mode golden-ratio window-purpose purpose better-shell buffer-flip command-log-mode css-eldoc ac-js2 jade php-extras php-eldoc js2-refactor alert zencoding-mode use-package-chords mc-extras impatient-mode restclient highlight gist avy ace-window org-bullets try try-package git-timemachine use-package)))
+    (org-tree-slide hexrgb lsp-ui lsp-mode flycheck-elm cider elm-mode php-extras csv-mode groovy-mode apples-mode ac-js2 anzu ag beacon pretty-lambdada undo-tree 2048-game rainbow-mode)))
  '(paradox-automatically-star t)
  '(paradox-github-token t)
  '(php-manual-path nil)
@@ -206,6 +208,7 @@
  '(visible-mark-max 2)
  '(warning-suppress-types (quote ((undo discard-info))))
  '(web-mode-code-indent-offset 4)
+ '(web-mode-enable-auto-indentation nil)
  '(whitespace-line-column 10000)
  '(yas-also-auto-indent-first-line t))
 (custom-set-faces
