@@ -4,7 +4,8 @@
     ;; when being invoked as zone, pull in the entire buffer
     ;; and set to the appropriate mode
     (erase-buffer)
-    (insert (zone-orig (buffer-substring (point-min) (point-max))))
+    (insert (zone-orig (buffer-substring (point-min)
+                                         (min (point-max) (+ (point-min) 100000)))))
     (set-window-start (selected-window)
                       (let ((zone-buf (current-buffer)))
                         (zone-orig

@@ -79,6 +79,7 @@ YghYmLCsGgUDCADAFmVzhgYAAA=="))
    `(font-lock-comment-face ,empty)
    `(font-lock-constant-face ,empty)
    `(font-lock-doc-face ,empty)
+   `(org-table ,empty)
    ))
 
 (custom-theme-set-variables
